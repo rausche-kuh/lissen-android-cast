@@ -89,7 +89,7 @@ android {
     minSdk = 28
     targetSdk = 37
     versionCode = 11209
-    versionName = "1.12.9-release"
+    versionName = "1.12.9-lauschen.1"
     
     testInstrumentationRunner = "org.grakovne.lissen.HiltTestRunner"
     
