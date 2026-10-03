@@ -3,13 +3,13 @@ package org.grakovne.lissen.playback
 import androidx.annotation.OptIn
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.grakovne.lissen.cast.ActivePlayer
 import org.grakovne.lissen.common.RunningComponent
 import org.grakovne.lissen.persistence.preferences.PlaybackPreferences
 import timber.log.Timber
@@ -27,11 +27,15 @@ class SleepTimerFadeService
   @OptIn(UnstableApi::class)
   @Inject
   constructor(
-    private val player: ExoPlayer,
+    private val activePlayer: ActivePlayer,
     private val playbackEventBus: PlaybackEventBus,
     private val preferences: PlaybackPreferences,
   ) : RunningComponent {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    // the renderer while casting
+    private val player: Player
+      get() = activePlayer.current
 
     private var fadeJob: Job? = null
     private var fading = false
@@ -48,7 +52,7 @@ class SleepTimerFadeService
       }
 
     override fun onCreate() {
-      player.addListener(playerListener)
+      activePlayer.addListener(playerListener)
 
       scope.launch {
         playbackEventBus.events.collect { event ->

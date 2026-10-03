@@ -10,6 +10,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.test.platform.app.InstrumentationRegistry
 import io.mockk.mockk
+import org.grakovne.lissen.cast.ActivePlayer
 import org.grakovne.lissen.domain.BookFile
 import org.grakovne.lissen.domain.DetailedItem
 import org.grakovne.lissen.domain.PlayingChapter
@@ -72,8 +73,9 @@ abstract class AutoSkipOnRealPlayer {
           }
         },
       )
-      timer = PlaybackTimer(PlaybackEventBus(), player)
-      AutoSkipService(player, preferences, syncState, timer, synchronization, steps).onCreate()
+      val activePlayer = ActivePlayer(player)
+      timer = PlaybackTimer(PlaybackEventBus(), activePlayer)
+      AutoSkipService(activePlayer, preferences, syncState, timer, synchronization, steps).onCreate()
 
       // in the order the playback service does it
       syncState.update { it.start(item) }

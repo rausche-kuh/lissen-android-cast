@@ -17,6 +17,7 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.grakovne.lissen.cast.ActivePlayer
 import org.grakovne.lissen.content.ExternalCoverProvider
 import org.grakovne.lissen.domain.BookFile
 import org.grakovne.lissen.domain.DetailedItem
@@ -34,6 +35,9 @@ import javax.inject.Inject
 class PlaybackService : MediaLibraryService() {
   @Inject
   lateinit var exoPlayer: ExoPlayer
+
+  @Inject
+  lateinit var activePlayer: ActivePlayer
 
   @Inject
   lateinit var mediaLibrarySessionProvider: MediaLibrarySessionProvider
@@ -56,6 +60,10 @@ class PlaybackService : MediaLibraryService() {
     Timber.d("PlaybackService created")
 
     session = getSession()
+
+    playerServiceScope.launch {
+      activePlayer.player.collect { session?.player = it }
+    }
 
     playerServiceScope.launch {
       playbackEventBus.commands.collect { command ->
@@ -101,6 +109,7 @@ class PlaybackService : MediaLibraryService() {
     playbackSynchronizationService.cancelSynchronization()
     playerServiceScope.cancel()
 
+    activePlayer.reset()
     haltPlayback(exoPlayer)
 
     session?.release()
@@ -111,6 +120,8 @@ class PlaybackService : MediaLibraryService() {
 
   @OptIn(UnstableApi::class)
   private suspend fun preparePlayback(book: DetailedItem) {
+    // the renderer while casting
+    val exoPlayer = activePlayer.current
     exoPlayer.playWhenReady = false
 
     withContext(Dispatchers.IO) {

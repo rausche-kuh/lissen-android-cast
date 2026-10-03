@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import org.grakovne.lissen.cast.ActivePlayer
 import org.grakovne.lissen.domain.CurrentEpisodeTimerOption
 import org.grakovne.lissen.domain.DurationTimerOption
 import org.grakovne.lissen.playback.PlaybackEvent
@@ -32,8 +33,10 @@ class PlaybackTimerTest {
   private val listeners = mutableListOf<Player.Listener>()
   private val countdowns = mutableListOf<FakeCountdown>()
 
+  private val activePlayer = ActivePlayer(player).apply { eventsOf = { mockk(relaxed = true) } }
+
   private val timer =
-    PlaybackTimer(bus, player).apply {
+    PlaybackTimer(bus, activePlayer).apply {
       countdownFactory = CountdownFactory { total, _, _, onFinished -> FakeCountdown(total, onFinished).also { countdowns += it } }
     }
 
@@ -56,6 +59,18 @@ class PlaybackTimerTest {
       assertEquals(listOf(PlaybackEvent.TimerTick(35), PlaybackEvent.TimerExpired), events)
       assertFalse(timer.isEpisodeTimerRunning)
     }
+
+  @Test
+  fun `a timer that runs out while casting pauses the renderer`() {
+    val renderer = mockk<Player>(relaxed = true)
+    timer.startTimer(300.0, DurationTimerOption(5))
+    activePlayer.switch(renderer)
+
+    countdowns.single().finish()
+
+    verify { renderer.pause() }
+    verify(exactly = 0) { player.pause() }
+  }
 
   @Test
   fun `a duration timer does not own the end of the episode`() {

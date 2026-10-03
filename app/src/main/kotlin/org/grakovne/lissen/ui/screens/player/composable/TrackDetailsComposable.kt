@@ -1,9 +1,11 @@
 package org.grakovne.lissen.ui.screens.player.composable
 
 import android.content.Context
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -54,14 +56,18 @@ fun BookCover(
         .build()
     }
 
-  AsyncShimmeringImage(
-    imageRequest = imageRequest,
-    imageLoader = imageLoader,
-    contentDescription = null,
-    contentScale = ContentScale.FillBounds,
-    modifier = modifier.clip(RoundedCornerShape(8.dp)),
-    error = painterResource(R.drawable.cover_fallback),
-  )
+  Box(modifier = modifier) {
+    AsyncShimmeringImage(
+      imageRequest = imageRequest,
+      imageLoader = imageLoader,
+      contentDescription = null,
+      contentScale = ContentScale.FillBounds,
+      modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)),
+      error = painterResource(R.drawable.cover_fallback),
+    )
+
+    CastButton(modifier = Modifier.align(Alignment.TopEnd).padding(8.dp))
+  }
 }
 
 @Composable

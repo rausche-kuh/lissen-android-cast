@@ -17,6 +17,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import org.grakovne.lissen.cast.ActivePlayer
 import org.grakovne.lissen.domain.SleepTimerSettings
 import org.grakovne.lissen.persistence.preferences.PlaybackPreferences
 import org.junit.jupiter.api.AfterEach
@@ -189,7 +190,7 @@ class SleepTimerFadeInteractionTest {
       every { preferences.getSleepTimerSettings() } returns SleepTimerSettings(fadeEnabled = true, fadeSeconds = 30)
 
       val bus = PlaybackEventBus()
-      SleepTimerFadeService(player, bus, preferences).onCreate()
+      SleepTimerFadeService(ActivePlayer(player), bus, preferences).onCreate()
       advanceUntilIdle()
 
       test(bus)

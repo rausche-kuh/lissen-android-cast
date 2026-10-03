@@ -59,3 +59,8 @@
 
 # RunningComponent multi-binding — Set<RunningComponent> resolved at runtime by Hilt
 -keep class * implements org.grakovne.lissen.common.RunningComponent { *; }
+
+# chromecast-java-api-v2 — Jackson maps the Cast messages onto these classes by reflection
+-keep class su.litvak.chromecast.api.v2.** { *; }
+-dontwarn com.fasterxml.jackson.databind.ext.**
+-dontwarn org.slf4j.impl.**

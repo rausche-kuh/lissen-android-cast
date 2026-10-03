@@ -5,12 +5,12 @@ import androidx.annotation.OptIn
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.PlayerMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.grakovne.lissen.cast.ActivePlayer
 import org.grakovne.lissen.common.RunningComponent
 import org.grakovne.lissen.domain.DetailedItem
 import org.grakovne.lissen.playback.service.PlaybackSynchronizationService
@@ -31,7 +31,7 @@ import javax.inject.Singleton
 class AutoSkipService
   @Inject
   constructor(
-    private val player: ExoPlayer,
+    private val activePlayer: ActivePlayer,
     private val preferences: AutoSkipPreferences,
     private val syncState: SyncStateStore,
     private val playbackTimer: PlaybackTimer,
@@ -39,6 +39,10 @@ class AutoSkipService
     private val steps: PlaybackSteps,
   ) : RunningComponent {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    // the renderer while casting
+    private val player: Player
+      get() = activePlayer.current
 
     private var owed: Int? = null
     private var planted: PlantedOutros? = null
@@ -112,7 +116,7 @@ class AutoSkipService
       }
 
     override fun onCreate() {
-      player.addListener(listener)
+      activePlayer.addListener(listener)
       scope.launch { preferences.flow.collect { plantOutroMessages() } }
     }
 
@@ -218,7 +222,7 @@ class AutoSkipService
         wanted?.let { plan ->
           val messages =
             AutoSkipPlanner.outroPositions(plan.book, plan.configuration).map { (index, positionMs) ->
-              player
+              activePlayer
                 .createMessage { _, _ -> post { onOutroCrossed(index) } }
                 .setPosition(index, positionMs)
                 .setLooper(Looper.getMainLooper())
