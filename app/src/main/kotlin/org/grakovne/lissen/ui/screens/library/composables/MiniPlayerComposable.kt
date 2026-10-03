@@ -66,6 +66,7 @@ import org.grakovne.lissen.domain.LibraryType
 import org.grakovne.lissen.ui.components.AsyncShimmeringImage
 import org.grakovne.lissen.ui.components.BookCoverKey
 import org.grakovne.lissen.ui.navigation.AppNavigationService
+import org.grakovne.lissen.ui.screens.player.composable.isCastConnecting
 import org.grakovne.lissen.viewmodel.PlayerViewModel
 
 @Composable
@@ -245,6 +246,7 @@ private fun PlaybackProgressButton(
 
   PlaybackButton(
     isPlaying = isPlaying,
+    connecting = isCastConnecting(),
     progress = progress,
     onClick = onClick,
   )
@@ -263,23 +265,36 @@ private fun calculateProgress(
 @Composable
 private fun PlaybackButton(
   isPlaying: Boolean,
+  connecting: Boolean,
   progress: Float,
   onClick: () -> Unit,
 ) {
-  IconButton(onClick = onClick) {
+  IconButton(onClick = onClick, enabled = connecting.not()) {
     Box(
       contentAlignment = Alignment.Center,
       modifier = Modifier.size(34.dp),
     ) {
-      CircularProgressIndicator(
-        progress = { progress },
-        modifier = Modifier.size(28.dp),
-        strokeWidth = 28.dp * 0.1f,
-        color = colorScheme.primary,
-        trackColor = colorScheme.onBackground,
-        strokeCap = StrokeCap.Butt,
-        gapSize = 2.dp,
-      )
+      when (connecting) {
+        true -> {
+          CircularProgressIndicator(
+            modifier = Modifier.size(28.dp),
+            strokeWidth = 28.dp * 0.1f,
+            color = colorScheme.primary,
+          )
+        }
+
+        false -> {
+          CircularProgressIndicator(
+            progress = { progress },
+            modifier = Modifier.size(28.dp),
+            strokeWidth = 28.dp * 0.1f,
+            color = colorScheme.primary,
+            trackColor = colorScheme.onBackground,
+            strokeCap = StrokeCap.Butt,
+            gapSize = 2.dp,
+          )
+        }
+      }
       Icon(
         imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
         contentDescription = if (isPlaying) "Pause" else "Play",

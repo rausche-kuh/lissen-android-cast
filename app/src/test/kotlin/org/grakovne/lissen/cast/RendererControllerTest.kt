@@ -14,7 +14,8 @@ class RendererControllerTest {
   private var token = ""
   private var unopenable: String? = null
   private var onSleep: () -> Unit = {}
-  private val controller =
+  private val changes = mutableListOf<RendererState>()
+  private val controller: RendererController =
     RendererController(
       transport = transport,
       streams = { chapter, fileId ->
@@ -26,6 +27,7 @@ class RendererControllerTest {
         now += it
         onSleep()
       },
+      onChange = { changes += controller.state },
     )
 
   @Test
@@ -42,6 +44,19 @@ class RendererControllerTest {
     start(index = 0, positionMs = 120_000)
 
     assertEquals(listOf("setUri http://abs/a One", "play", "seek 120000"), transport.commands)
+    assertTrue(controller.state.playing)
+  }
+
+  @Test
+  fun `the position holds while the renderer takes its time to play`() {
+    transport.startDelayPolls = 12
+    start(index = 0, positionMs = 120_000)
+
+    val loading = changes.filter { it.loading }
+    assertTrue(loading.isNotEmpty())
+    assertTrue(loading.all { it.playing.not() && it.positionMs == 120_000L })
+    assertEquals(120_000, controller.state.positionMs)
+    assertEquals(now, controller.state.positionAt)
     assertTrue(controller.state.playing)
   }
 
@@ -174,6 +189,23 @@ class RendererControllerTest {
   }
 
   @Test
+  fun `the position holds while the next file loads`() {
+    start(index = 1, positionMs = 0)
+    settle()
+    transport.track = TrackPosition(relTimeMs = 599_000, trackDurationMs = 600_000)
+    controller.poll()
+    transport.state = TransportState.STOPPED
+    transport.startDelayPolls = 4
+    changes.clear()
+
+    controller.poll()
+
+    val loading = changes.filter { it.loading }
+    assertTrue(loading.isNotEmpty())
+    assertTrue(loading.all { it.playing.not() })
+  }
+
+  @Test
   fun `the end of the last file ends playback`() {
     start(index = 2, positionMs = 0)
     settle()
@@ -267,6 +299,19 @@ class RendererControllerTest {
     controller.poll()
 
     assertFalse(controller.state.playWhenReady)
+  }
+
+  @Test
+  fun `a renderer rebuffering in the middle of a file keeps playing`() {
+    start(index = 0, positionMs = 0)
+    settle()
+
+    transport.state = TransportState.TRANSITIONING
+    transport.startDelayPolls = 2
+    controller.poll()
+
+    assertTrue(controller.state.loading)
+    assertTrue(controller.state.playing)
   }
 
   @Test
@@ -540,6 +585,7 @@ class RendererControllerTest {
     var startsPlaying = true
     var dropsSeeks = 0
     var takesNext = false
+    var startDelayPolls = 0
 
     override fun setUri(stream: CastStream) {
       commands += "setUri ${stream.url} ${stream.title}"
@@ -548,7 +594,7 @@ class RendererControllerTest {
 
     override fun play() {
       commands += "play"
-      if (startsPlaying) state = TransportState.PLAYING
+      if (startsPlaying) state = if (startDelayPolls > 0) TransportState.TRANSITIONING else TransportState.PLAYING
     }
 
     override fun pause() {
@@ -573,6 +619,10 @@ class RendererControllerTest {
 
     override fun positionInfo(): TrackPosition = track.also { if (failing) throw RendererException("timeout") }
 
-    override fun transportState(): TransportState = state.also { if (failing) throw RendererException("timeout") }
+    override fun transportState(): TransportState {
+      if (failing) throw RendererException("timeout")
+      if (state == TransportState.TRANSITIONING && --startDelayPolls <= 0) state = TransportState.PLAYING
+      return state
+    }
   }
 }

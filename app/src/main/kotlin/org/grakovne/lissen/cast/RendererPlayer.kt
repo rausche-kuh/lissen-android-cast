@@ -36,10 +36,11 @@ class RendererPlayer(
   private val onFailure: (Exception) -> Unit,
 ) : SimpleBasePlayer(Looper.getMainLooper()),
   PlayerMessage.Sender {
-  private val controller = RendererController(transport, streams, SystemClock::elapsedRealtime)
+  private val handler = Handler(Looper.getMainLooper())
+  private val controller =
+    RendererController(transport, streams, SystemClock::elapsedRealtime, onChange = { handler.post(::refresh) })
   private val volume = RendererVolume(volumeControl)
   private val executor = MoreExecutors.listeningDecorator(Executors.newSingleThreadScheduledExecutor())
-  private val handler = Handler(Looper.getMainLooper())
 
   private var playlist: List<MediaItemData> = emptyList()
   private var playlistGeneration = 0
@@ -55,6 +56,10 @@ class RendererPlayer(
 
   @Volatile
   private var polling: Future<*> = schedulePoll(RendererController.POLL_INTERVAL_MS)
+
+  /** Asked to play and not started yet; a renderer rebuffering in the middle of a file is not connecting. */
+  val connecting: Boolean
+    get() = playWhenReady && playbackState == STATE_BUFFERING && controller.state.playing.not()
 
   val mediaItems: List<MediaItem>
     get() = playlist.map { it.mediaItem }
@@ -112,6 +117,20 @@ class RendererPlayer(
 
     return builder.build()
   }
+
+  /** A play request waits for the renderer to load: until it plays, the player buffers and the position holds. */
+  override fun getPlaceholderState(suggestedPlaceholderState: State): State =
+    when {
+      suggestedPlaceholderState.playWhenReady &&
+        suggestedPlaceholderState.playbackState == STATE_READY &&
+        controller.state.playing.not() -> {
+        suggestedPlaceholderState.buildUpon().setPlaybackState(STATE_BUFFERING).build()
+      }
+
+      else -> {
+        suggestedPlaceholderState
+      }
+    }
 
   override fun handleSetMediaItems(
     mediaItems: List<MediaItem>,

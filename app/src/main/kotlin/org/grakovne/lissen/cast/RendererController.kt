@@ -30,10 +30,16 @@ class RendererController(
   private val streams: StreamSource,
   private val clock: () -> Long,
   private val sleep: (Long) -> Unit = Thread::sleep,
+  /** Called on every change of [state], also in the middle of a command. */
+  private val onChange: () -> Unit = {},
 ) {
   @Volatile
   var state = RendererState()
-    private set
+    private set(value) {
+      if (value == field) return
+      field = value
+      onChange()
+    }
 
   private var queue = CastQueue(emptyList())
   private var loadedFile: String? = null
@@ -358,6 +364,8 @@ class RendererController(
   private fun load(target: FilePosition) {
     Timber.d("Loading file ${target.fileId} at ${target.offsetMs}ms for chapter ${state.index}")
     val stream = streams.open(queue.chapters[state.index], target.fileId)
+    // the position holds until the renderer plays
+    freeze()
     state = state.copy(loading = true)
 
     dropNext()

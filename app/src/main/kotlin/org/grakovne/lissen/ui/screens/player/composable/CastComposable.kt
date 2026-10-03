@@ -54,6 +54,10 @@ import org.grakovne.lissen.viewmodel.CastViewModel
 @Composable
 fun isCasting(viewModel: CastViewModel = hiltViewModel()): Boolean = viewModel.active.collectAsState().value != null
 
+/** The cast device was asked to play and hasn't started: play, pause and seeks wait for it. */
+@Composable
+fun isCastConnecting(viewModel: CastViewModel = hiltViewModel()): Boolean = viewModel.connecting.collectAsState().value
+
 @Composable
 fun CastButton(
   modifier: Modifier = Modifier,
