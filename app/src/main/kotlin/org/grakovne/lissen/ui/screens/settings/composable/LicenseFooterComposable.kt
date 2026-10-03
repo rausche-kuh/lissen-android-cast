@@ -36,7 +36,7 @@ fun LicenseFooterComposable() {
           .fillMaxWidth()
           .padding(top = 16.dp)
           .align(Alignment.CenterHorizontally),
-      text = "Lissen ${BuildConfig.VERSION_NAME}",
+      text = "Lauschen ${BuildConfig.VERSION_NAME}",
       style =
         TextStyle(
           fontFamily = FontFamily.Monospace,
@@ -49,7 +49,7 @@ fun LicenseFooterComposable() {
           .fillMaxWidth()
           .padding(top = 8.dp)
           .align(Alignment.CenterHorizontally),
-      text = "© 2024-2026 Max Grakov. MIT License",
+      text = "© 2024-2026 Lissen Cast Fork. MIT License",
       style =
         TextStyle(
           fontFamily = FontFamily.Monospace,

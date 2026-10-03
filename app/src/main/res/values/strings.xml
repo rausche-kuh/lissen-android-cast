@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">Lissen</string>
+    <string name="app_name" translatable="false">Lauschen</string>
     <string name="a11y_back">Back</string>
     <string name="a11y_menu">Menu</string>
     <string name="a11y_search">Search</string>

@@ -163,7 +163,7 @@ abstract class AudiobookshelfChannel(
       .fetchConnectionInfo()
       .map { connectionInfoResponseConverter.apply(it) }
 
-  protected fun getClientName() = "Lissen App ${BuildConfig.VERSION_NAME}"
+  protected fun getClientName() = "Lauschen App ${BuildConfig.VERSION_NAME}"
 
   protected fun buildPlaybackStartRequest(
     supportedMimeTypes: List<String>,
