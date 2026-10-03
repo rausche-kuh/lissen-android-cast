@@ -11,8 +11,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import org.grakovne.lissen.cast.CastDevice
 import org.grakovne.lissen.cast.CastSession
-import org.grakovne.lissen.cast.upnp.Renderer
 import org.grakovne.lissen.persistence.preferences.LibraryPreferences
 import javax.inject.Inject
 
@@ -23,17 +23,17 @@ class CastViewModel
     private val castSession: CastSession,
     libraryPreferences: LibraryPreferences,
   ) : ViewModel() {
-    val active: StateFlow<Renderer?> = castSession.renderer
+    val active: StateFlow<CastDevice?> = castSession.device
 
-    /** Renderers stream from the server, so offline mode has nothing to offer them. */
+    /** Cast devices stream from the server, so offline mode has nothing to offer them. */
     val available: StateFlow<Boolean> =
       libraryPreferences.forceCacheFlow
         .map { it.not() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), libraryPreferences.isForceCache().not())
 
     /** Null until the first scan has finished. */
-    private val _devices = MutableStateFlow<List<Renderer>?>(null)
-    val devices: StateFlow<List<Renderer>?> = _devices.asStateFlow()
+    private val _devices = MutableStateFlow<List<CastDevice>?>(null)
+    val devices: StateFlow<List<CastDevice>?> = _devices.asStateFlow()
 
     private val _scanning = MutableStateFlow(false)
     val scanning: StateFlow<Boolean> = _scanning.asStateFlow()
@@ -56,7 +56,7 @@ class CastViewModel
       scanJob = null
     }
 
-    fun connect(renderer: Renderer) = castSession.connect(renderer)
+    fun connect(device: CastDevice) = castSession.connect(device)
 
     fun disconnect() = castSession.disconnect()
   }

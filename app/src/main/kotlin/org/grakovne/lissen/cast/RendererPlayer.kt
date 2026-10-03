@@ -16,8 +16,6 @@ import androidx.media3.exoplayer.PlayerMessage
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
-import org.grakovne.lissen.cast.upnp.Transport
-import org.grakovne.lissen.cast.upnp.VolumeControl
 import org.grakovne.lissen.playback.service.FileClip
 import org.grakovne.lissen.playback.service.LissenMediaSourceFactory
 import org.grakovne.lissen.playback.service.PlaybackService.Companion.FILE_SEGMENTS
@@ -25,11 +23,11 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /**
- * A [Player] over a UPnP renderer. It shows the same chapter queue as the ExoPlayer, so every
+ * A [Player] over a cast device. It shows the same chapter queue as the ExoPlayer, so every
  * consumer of chapter indices and positions keeps working, and plays the files behind it.
  */
 @OptIn(UnstableApi::class)
-class UpnpPlayer(
+class RendererPlayer(
   transport: Transport,
   volumeControl: VolumeControl?,
   streams: StreamSource,
@@ -69,10 +67,26 @@ class UpnpPlayer(
   override fun getState(): State {
     val rendererState = controller.state
 
+    val playbackState =
+      when {
+        playlist.isEmpty() || rendererState.prepared.not() -> STATE_IDLE
+        rendererState.ended -> STATE_ENDED
+        rendererState.loading -> STATE_BUFFERING
+        else -> STATE_READY
+      }
+
+    // volume keys pressed while the renderer loads would queue behind the load and land all at once
+    val commands =
+      when {
+        volume.available.not() -> COMMANDS
+        playbackState == STATE_READY -> COMMANDS_WITH_VOLUME
+        else -> COMMANDS_WITH_FADE
+      }
+
     val builder =
       State
         .Builder()
-        .setAvailableCommands(if (volume.available) COMMANDS_WITH_VOLUME else COMMANDS)
+        .setAvailableCommands(commands)
         .setDeviceInfo(if (volume.available) REMOTE_WITH_VOLUME else REMOTE)
         .setVolume(volume.scale)
         .setDeviceVolume(volume.volume)
@@ -80,14 +94,7 @@ class UpnpPlayer(
         .setPlaylist(playlist)
         .setPlayWhenReady(rendererState.playWhenReady, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
         .setIsLoading(rendererState.loading)
-        .setPlaybackState(
-          when {
-            playlist.isEmpty() || rendererState.prepared.not() -> STATE_IDLE
-            rendererState.ended -> STATE_ENDED
-            rendererState.loading -> STATE_BUFFERING
-            else -> STATE_READY
-          },
-        )
+        .setPlaybackState(playbackState)
 
     if (playlist.isNotEmpty()) {
       val index = rendererState.index.coerceIn(playlist.indices)
@@ -265,7 +272,10 @@ class UpnpPlayer(
       last.index + 1 -> {
         index == last.index && positionMs > last.positionMs && tick.positionMs <= MAX_TICK_MS
       }
-      else -> false
+
+      else -> {
+        false
+      }
     }
   }
 
@@ -319,13 +329,20 @@ class UpnpPlayer(
           COMMAND_RELEASE,
         ).build()
 
-    val COMMANDS_WITH_VOLUME: Player.Commands =
+    /** The sleep timer fades and the volume shows, but the device volume can't be changed. */
+    val COMMANDS_WITH_FADE: Player.Commands =
       COMMANDS
         .buildUpon()
         .addAll(
           COMMAND_GET_VOLUME,
           COMMAND_SET_VOLUME,
           COMMAND_GET_DEVICE_VOLUME,
+        ).build()
+
+    val COMMANDS_WITH_VOLUME: Player.Commands =
+      COMMANDS_WITH_FADE
+        .buildUpon()
+        .addAll(
           COMMAND_SET_DEVICE_VOLUME_WITH_FLAGS,
           COMMAND_ADJUST_DEVICE_VOLUME_WITH_FLAGS,
         ).build()

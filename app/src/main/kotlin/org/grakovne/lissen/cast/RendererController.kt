@@ -1,23 +1,7 @@
 package org.grakovne.lissen.cast
 
-import org.grakovne.lissen.cast.upnp.TrackPosition
-import org.grakovne.lissen.cast.upnp.Transport
-import org.grakovne.lissen.cast.upnp.TransportState
-import org.grakovne.lissen.cast.upnp.UpnpException
 import timber.log.Timber
 import kotlin.math.abs
-
-data class CastStream(
-  val url: String,
-  val metadata: String,
-)
-
-fun interface StreamSource {
-  fun open(
-    chapter: QueueChapter,
-    fileId: String,
-  ): CastStream
-}
 
 data class RendererState(
   val prepared: Boolean = false,
@@ -122,6 +106,7 @@ class RendererController(
 
   fun release() {
     if (loadedFile != null) runCatching { transport.stop() }
+    runCatching { transport.close() }
     loadedFile = null
     loadedUrl = null
   }
@@ -266,7 +251,7 @@ class RendererController(
 
     // a renderer left paused by an earlier session keeps its old stream and resumes it on play
     if (transport.transportState() !in IDLE) transport.stop()
-    transport.setUri(stream.url, stream.metadata)
+    transport.setUri(stream)
     transport.play()
     awaitPlaying()
     Timber.d("Renderer plays file ${target.fileId}")
@@ -284,7 +269,7 @@ class RendererController(
     val deadline = clock() + LOAD_TIMEOUT_MS
 
     while (transport.transportState() != TransportState.PLAYING) {
-      if (clock() > deadline) throw UpnpException("The renderer did not start playing")
+      if (clock() > deadline) throw RendererException("The renderer did not start playing")
       sleep(LOAD_POLL_MS)
     }
   }

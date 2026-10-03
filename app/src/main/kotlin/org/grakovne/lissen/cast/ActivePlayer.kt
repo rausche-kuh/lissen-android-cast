@@ -49,7 +49,7 @@ class ActivePlayer
 
     /** A message on the active player. A switch cancels it, and announces a new playlist to plant it again. */
     fun createMessage(target: PlayerMessage.Target): PlayerMessage =
-      ((current as? UpnpPlayer)?.createMessage(target) ?: exoPlayer.createMessage(target))
+      ((current as? RendererPlayer)?.createMessage(target) ?: exoPlayer.createMessage(target))
         .also { messages += it }
 
     fun switch(player: Player) {

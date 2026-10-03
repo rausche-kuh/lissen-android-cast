@@ -3,6 +3,7 @@ package org.grakovne.lissen.cast.upnp
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.grakovne.lissen.cast.CastDevice
 import org.w3c.dom.Element
 import timber.log.Timber
 import java.net.DatagramPacket
@@ -13,10 +14,13 @@ import java.util.concurrent.ConcurrentHashMap
 
 data class Renderer(
   val udn: String,
-  val name: String,
+  override val name: String,
   val controlUrl: String,
   val volumeUrl: String? = null,
-)
+) : CastDevice {
+  override val id: String = "upnp:$udn"
+  override val protocol: String = "UPnP"
+}
 
 /**
  * Finds MediaRenderers through one SSDP M-SEARCH and the device description of each answer. A

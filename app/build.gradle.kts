@@ -184,6 +184,7 @@ dependencies {
   implementation(libs.retrofit)
   implementation(libs.logging.interceptor)
   implementation(libs.okhttp)
+  implementation(libs.chromecast.api)
   implementation(libs.androidx.browser)
   implementation(libs.androidx.collection)
   

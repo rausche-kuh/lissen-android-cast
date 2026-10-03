@@ -1,9 +1,5 @@
 package org.grakovne.lissen.cast
 
-import org.grakovne.lissen.cast.upnp.TrackPosition
-import org.grakovne.lissen.cast.upnp.Transport
-import org.grakovne.lissen.cast.upnp.TransportState
-import org.grakovne.lissen.cast.upnp.UpnpException
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -335,11 +331,8 @@ class RendererControllerTest {
     var startsPlaying = true
     var dropsSeeks = 0
 
-    override fun setUri(
-      uri: String,
-      metadata: String,
-    ) {
-      commands += "setUri $uri $metadata"
+    override fun setUri(stream: CastStream) {
+      commands += "setUri ${stream.url} ${stream.title}"
       state = TransportState.STOPPED
     }
 
@@ -363,8 +356,8 @@ class RendererControllerTest {
       if (dropsSeeks-- <= 0) track = track.copy(relTimeMs = positionMs)
     }
 
-    override fun positionInfo(): TrackPosition = track.also { if (failing) throw UpnpException("timeout") }
+    override fun positionInfo(): TrackPosition = track.also { if (failing) throw RendererException("timeout") }
 
-    override fun transportState(): TransportState = state.also { if (failing) throw UpnpException("timeout") }
+    override fun transportState(): TransportState = state.also { if (failing) throw RendererException("timeout") }
   }
 }

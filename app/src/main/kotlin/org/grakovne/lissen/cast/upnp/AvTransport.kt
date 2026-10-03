@@ -1,47 +1,16 @@
 package org.grakovne.lissen.cast.upnp
 
 import okhttp3.OkHttpClient
-import java.io.IOException
+import org.grakovne.lissen.cast.CastStream
+import org.grakovne.lissen.cast.RendererException
+import org.grakovne.lissen.cast.TrackPosition
+import org.grakovne.lissen.cast.Transport
+import org.grakovne.lissen.cast.TransportState
 import java.util.Locale
-
-enum class TransportState {
-  PLAYING,
-  PAUSED,
-  STOPPED,
-  TRANSITIONING,
-  NO_MEDIA,
-  UNKNOWN,
-}
-
-data class TrackPosition(
-  val relTimeMs: Long?,
-  val trackDurationMs: Long?,
-  val trackUri: String? = null,
-)
-
-/** The AVTransport actions the cast player needs. Every call blocks until the renderer answers. */
-interface Transport {
-  fun setUri(
-    uri: String,
-    metadata: String,
-  )
-
-  fun play()
-
-  fun pause()
-
-  fun stop()
-
-  fun seek(positionMs: Long)
-
-  fun positionInfo(): TrackPosition
-
-  fun transportState(): TransportState
-}
 
 class UpnpException(
   message: String,
-) : IOException(message)
+) : RendererException(message)
 
 class AvTransport(
   controlUrl: String,
@@ -49,7 +18,10 @@ class AvTransport(
 ) : Transport {
   private val service = SoapService(controlUrl, SsdpDiscovery.AV_TRANSPORT, httpClient)
 
-  override fun setUri(
+  override fun setUri(stream: CastStream) =
+    setUri(stream.url, didlLite(stream.url, stream.title, stream.album, stream.coverUrl, stream.mimeType))
+
+  internal fun setUri(
     uri: String,
     metadata: String,
   ) {

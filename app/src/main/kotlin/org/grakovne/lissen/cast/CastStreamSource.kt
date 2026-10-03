@@ -2,7 +2,6 @@ package org.grakovne.lissen.cast
 
 import android.net.Uri
 import androidx.core.net.toUri
-import org.grakovne.lissen.cast.upnp.didlLite
 import org.grakovne.lissen.channel.audiobookshelf.AudiobookshelfHostProvider
 import org.grakovne.lissen.content.LissenMediaProvider
 import org.grakovne.lissen.persistence.preferences.SessionPreferences
@@ -53,7 +52,7 @@ class CastStreamSource
           ?.find { it.id == fileId }
           ?.mimeType
 
-      return CastStream(url, didlLite(url, chapter.title, chapter.album, coverUrl, mimeType))
+      return CastStream(url, chapter.title, chapter.album, coverUrl, mimeType)
     }
 
     private fun Uri.withToken(): String =

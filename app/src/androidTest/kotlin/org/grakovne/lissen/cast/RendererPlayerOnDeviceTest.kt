@@ -6,9 +6,6 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import org.grakovne.lissen.cast.upnp.TrackPosition
-import org.grakovne.lissen.cast.upnp.Transport
-import org.grakovne.lissen.cast.upnp.TransportState
 import org.grakovne.lissen.playback.service.FileClip
 import org.grakovne.lissen.playback.service.PlaybackService.Companion.CHAPTER_START_MS
 import org.grakovne.lissen.playback.service.PlaybackService.Companion.FILE_SEGMENTS
@@ -21,10 +18,10 @@ import java.util.Collections
 
 /** The real player on the main looper, as the cast handover drives it, over a recording transport. */
 @RunWith(AndroidJUnit4::class)
-class UpnpPlayerOnDeviceTest {
+class RendererPlayerOnDeviceTest {
   private val instrumentation = InstrumentationRegistry.getInstrumentation()
   private val transport = RecordingTransport()
-  private lateinit var player: UpnpPlayer
+  private lateinit var player: RendererPlayer
 
   @After
   fun tearDown() {
@@ -34,7 +31,7 @@ class UpnpPlayerOnDeviceTest {
   @Test
   fun aHandedOverPlayingQueueLoadsTheFileOfTheChapter() {
     instrumentation.runOnMainSync {
-      player = UpnpPlayer(transport, null, { _, fileId -> CastStream("http://abs/$fileId", "") }, {})
+      player = RendererPlayer(transport, null, { _, fileId -> CastStream("http://abs/$fileId", "") }, {})
       player.setMediaItems(chapterItems(), 1, 30_000)
       player.playWhenReady = true
       player.prepare()
@@ -48,7 +45,7 @@ class UpnpPlayerOnDeviceTest {
   @Test
   fun playPressedAfterAPausedHandoverLoadsTheFile() {
     instrumentation.runOnMainSync {
-      player = UpnpPlayer(transport, null, { _, fileId -> CastStream("http://abs/$fileId", "") }, {})
+      player = RendererPlayer(transport, null, { _, fileId -> CastStream("http://abs/$fileId", "") }, {})
       player.setMediaItems(chapterItems(), 2, 0)
       player.playWhenReady = false
       player.prepare()
@@ -102,11 +99,8 @@ class UpnpPlayerOnDeviceTest {
     @Volatile
     private var state = TransportState.NO_MEDIA
 
-    override fun setUri(
-      uri: String,
-      metadata: String,
-    ) {
-      commands += "setUri $uri"
+    override fun setUri(stream: CastStream) {
+      commands += "setUri ${stream.url}"
       state = TransportState.STOPPED
     }
 

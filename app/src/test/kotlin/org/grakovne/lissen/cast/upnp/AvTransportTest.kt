@@ -3,6 +3,8 @@ package org.grakovne.lissen.cast.upnp
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.OkHttpClient
+import org.grakovne.lissen.cast.TrackPosition
+import org.grakovne.lissen.cast.TransportState
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull

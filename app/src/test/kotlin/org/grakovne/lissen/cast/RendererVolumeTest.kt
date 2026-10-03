@@ -1,7 +1,5 @@
 package org.grakovne.lissen.cast
 
-import org.grakovne.lissen.cast.upnp.UpnpException
-import org.grakovne.lissen.cast.upnp.VolumeControl
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -125,7 +123,7 @@ class RendererVolumeTest {
     }
 
     private fun check() {
-      if (failing) throw UpnpException("unreachable")
+      if (failing) throw RendererException("unreachable")
     }
   }
 }

@@ -1,6 +1,5 @@
 package org.grakovne.lissen.cast
 
-import org.grakovne.lissen.cast.upnp.VolumeControl
 import timber.log.Timber
 import kotlin.math.roundToInt
 

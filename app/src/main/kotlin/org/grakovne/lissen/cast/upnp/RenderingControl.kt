@@ -1,21 +1,7 @@
 package org.grakovne.lissen.cast.upnp
 
 import okhttp3.OkHttpClient
-
-/** The master volume of a renderer, 0 to [MAX_VOLUME]. Every call blocks until the renderer answers. */
-interface VolumeControl {
-  fun volume(): Int
-
-  fun setVolume(volume: Int)
-
-  fun muted(): Boolean
-
-  fun setMuted(muted: Boolean)
-
-  companion object {
-    const val MAX_VOLUME = 100
-  }
-}
+import org.grakovne.lissen.cast.VolumeControl
 
 class RenderingControl(
   controlUrl: String,

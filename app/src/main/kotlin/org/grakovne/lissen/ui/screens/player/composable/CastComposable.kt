@@ -43,13 +43,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleStartEffect
 import org.grakovne.lissen.R
+import org.grakovne.lissen.cast.castDeviceOrder
 import org.grakovne.lissen.common.withHaptic
 import org.grakovne.lissen.ui.components.LissenModalBottomSheet
 import org.grakovne.lissen.ui.screens.common.RequestLocalNetworkPermission
 import org.grakovne.lissen.ui.screens.common.hasLocalNetworkPermission
 import org.grakovne.lissen.viewmodel.CastViewModel
 
-/** Renderers play at their own speed, so what they can't do is greyed out while casting. */
+/** Cast devices play at their own speed, so what they can't do is greyed out while casting. */
 @Composable
 fun isCasting(viewModel: CastViewModel = hiltViewModel()): Boolean = viewModel.active.collectAsState().value != null
 
@@ -140,15 +141,16 @@ fun CastDeviceSheet(
 
     if (available) {
       (listOfNotNull(active) + devices.orEmpty())
-        .distinctBy { it.udn }
-        .forEach { renderer ->
+        .distinctBy { it.id }
+        .sortedWith(castDeviceOrder)
+        .forEach { device ->
           CastDeviceRow(
-            title = renderer.name,
-            subtitle = "UPnP",
+            title = device.name,
+            subtitle = device.protocol,
             icon = Icons.Outlined.Speaker,
-            selected = active?.udn == renderer.udn,
+            selected = active?.id == device.id,
             onClick = {
-              viewModel.connect(renderer)
+              viewModel.connect(device)
               onDismissRequest()
             },
           )

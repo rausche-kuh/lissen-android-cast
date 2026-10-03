@@ -4,8 +4,11 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import dagger.multibindings.IntoSet
 import okhttp3.OkHttpClient
+import org.grakovne.lissen.cast.googlecast.GoogleCastProtocol
 import org.grakovne.lissen.cast.upnp.SsdpDiscovery
+import org.grakovne.lissen.cast.upnp.UpnpProtocol
 import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
 import javax.inject.Singleton
@@ -28,9 +31,16 @@ object CastModule {
       .readTimeout(15, TimeUnit.SECONDS)
       .build()
 
+  /** The device list shows what every protocol in the set finds. */
   @Provides
   @Singleton
-  fun provideSsdpDiscovery(
+  @IntoSet
+  fun provideUpnpProtocol(
     @RendererHttpClient httpClient: OkHttpClient,
-  ): SsdpDiscovery = SsdpDiscovery(httpClient)
+  ): CastProtocol = UpnpProtocol(SsdpDiscovery(httpClient), httpClient)
+
+  @Provides
+  @Singleton
+  @IntoSet
+  fun provideGoogleCastProtocol(): CastProtocol = GoogleCastProtocol()
 }

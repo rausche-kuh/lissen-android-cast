@@ -13,6 +13,9 @@ import androidx.media3.exoplayer.ExoPlayer
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,13 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import org.grakovne.lissen.R
-import org.grakovne.lissen.cast.upnp.AvTransport
-import org.grakovne.lissen.cast.upnp.Renderer
-import org.grakovne.lissen.cast.upnp.RenderingControl
-import org.grakovne.lissen.cast.upnp.SsdpDiscovery
 import org.grakovne.lissen.domain.DetailedItem
 import org.grakovne.lissen.playback.service.PlaybackService
 import org.grakovne.lissen.playback.service.SyncStateStore
@@ -34,7 +31,7 @@ import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Process-wide: moves playback between the phone and a renderer, with the queue and the position. */
+/** Process-wide: moves playback between the phone and a cast device, with the queue and the position. */
 @Singleton
 @OptIn(UnstableApi::class)
 class CastSession
@@ -43,15 +40,14 @@ class CastSession
     @param:ApplicationContext private val context: Context,
     private val activePlayer: ActivePlayer,
     private val exoPlayer: ExoPlayer,
-    private val discovery: SsdpDiscovery,
-    @param:RendererHttpClient private val httpClient: OkHttpClient,
+    private val protocols: Set<@JvmSuppressWildcards CastProtocol>,
     private val streams: CastStreamSource,
     private val syncState: SyncStateStore,
   ) {
-    private val _renderer = MutableStateFlow<Renderer?>(null)
-    val renderer: StateFlow<Renderer?> = _renderer.asStateFlow()
+    private val _device = MutableStateFlow<CastDevice?>(null)
+    val device: StateFlow<CastDevice?> = _device.asStateFlow()
 
-    private var player: UpnpPlayer? = null
+    private var player: RendererPlayer? = null
     private val scope = MainScope()
     private val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
     private val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -78,60 +74,50 @@ class CastSession
       }
     }
 
-    fun connect(renderer: Renderer) {
-      if (_renderer.value?.udn == renderer.udn) return
-      Timber.d("Casting to ${renderer.name}")
+    fun connect(device: CastDevice) {
+      if (_device.value?.id == device.id) return
+      val link = protocols.firstNotNullOfOrNull { it.open(device) } ?: return Timber.w("No protocol plays on ${device.id}")
+      Timber.d("Casting to ${device.name} over ${device.protocol}")
 
       val previous = player
-      val upnp =
-        UpnpPlayer(
-          AvTransport(renderer.controlUrl, httpClient),
-          renderer.volumeUrl?.let { RenderingControl(it, httpClient) },
-          streams,
-          ::onFailure,
-        )
-      player = upnp
-      _renderer.value = renderer
+      val remote = RendererPlayer(link.transport, link.volume, streams, ::onFailure)
+      player = remote
+      _device.value = device
 
-      handOver(from = activePlayer.current, to = upnp)
+      handOver(from = activePlayer.current, to = remote)
       previous?.let(::release)
-      upnp.addListener(lockListener)
-      holdLocks(upnp.keepsPolling)
+      remote.addListener(lockListener)
+      holdLocks(remote.keepsPolling)
     }
 
     fun disconnect() = disconnect(resume = null)
 
-    /** A renderer scan every few seconds. A renderer missing from two scans in a row drops out. */
-    fun scan(): Flow<List<Renderer>> =
+    /** A scan of every protocol every few seconds. A device missing from two scans in a row drops out. */
+    fun scan(): Flow<List<CastDevice>> =
       flow {
         val multicastLock = wifiManager.createMulticastLock("lissen:cast-discovery").apply { setReferenceCounted(false) }
         val missedScans = mutableMapOf<String, Int>()
-        val known = mutableMapOf<String, Renderer>()
+        val known = mutableMapOf<String, CastDevice>()
 
         try {
           multicastLock.acquire()
 
           while (true) {
-            val found =
-              withContext(Dispatchers.IO) {
-                runCatching { discovery.search() }
-                  .onFailure { Timber.w(it, "Renderer discovery failed") }
-                  .getOrDefault(emptyList())
-              }
+            val found = searchAll()
 
             found.forEach {
-              known[it.udn] = it
-              missedScans[it.udn] = 0
+              known[it.id] = it
+              missedScans[it.id] = 0
             }
             known.keys
-              .filter { udn -> found.none { it.udn == udn } }
-              .forEach { udn ->
-                val missed = (missedScans[udn] ?: 0) + 1
-                missedScans[udn] = missed
-                if (missed >= MAX_MISSED_SCANS) known.remove(udn)
+              .filter { id -> found.none { it.id == id } }
+              .forEach { id ->
+                val missed = (missedScans[id] ?: 0) + 1
+                missedScans[id] = missed
+                if (missed >= MAX_MISSED_SCANS) known.remove(id)
               }
 
-            emit(known.values.sortedBy { it.name.lowercase() })
+            emit(known.values.sortedWith(castDeviceOrder))
             delay(SCAN_PAUSE_MS)
           }
         } finally {
@@ -139,15 +125,28 @@ class CastSession
         }
       }
 
+    private suspend fun searchAll(): List<CastDevice> =
+      coroutineScope {
+        protocols
+          .map { protocol ->
+            async(Dispatchers.IO) {
+              runCatching { protocol.search() }
+                .onFailure { Timber.w(it, "Discovery failed in ${protocol::class.simpleName}") }
+                .getOrDefault(emptyList())
+            }
+          }.awaitAll()
+          .flatten()
+      }
+
     private fun disconnect(resume: Boolean?) {
-      val upnp = player ?: return
+      val remote = player ?: return
       Timber.d("Casting ended")
 
       player = null
-      _renderer.value = null
+      _device.value = null
 
-      handOver(from = upnp, to = exoPlayer, playWhenReady = resume ?: upnp.playWhenReady)
-      release(upnp)
+      handOver(from = remote, to = exoPlayer, playWhenReady = resume ?: remote.playWhenReady)
+      release(remote)
     }
 
     private fun onFailure(error: Exception) {
@@ -196,15 +195,15 @@ class CastSession
     }
 
     private fun release() {
-      val upnp = player ?: return
+      val remote = player ?: return
       player = null
-      _renderer.value = null
-      release(upnp)
+      _device.value = null
+      release(remote)
     }
 
-    private fun release(upnp: UpnpPlayer) {
-      upnp.removeListener(lockListener)
-      upnp.release()
+    private fun release(remote: RendererPlayer) {
+      remote.removeListener(lockListener)
+      remote.release()
       holdLocks(false)
     }
 
