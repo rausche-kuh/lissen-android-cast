@@ -19,7 +19,9 @@ import com.google.common.util.concurrent.MoreExecutors
 import org.grakovne.lissen.playback.service.FileClip
 import org.grakovne.lissen.playback.service.LissenMediaSourceFactory
 import org.grakovne.lissen.playback.service.PlaybackService.Companion.FILE_SEGMENTS
+import timber.log.Timber
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 
 /**
@@ -43,23 +45,16 @@ class RendererPlayer(
   private var playlistGeneration = 0
   private var reportedAutoTransitions = 0
   private var failureReported = false
+
+  @Volatile
   private var released = false
 
   // the renderer reports its position once per poll: a message is due when the position moves past it
   private val messages = mutableListOf<PlayerMessage>()
   private var lastTick: QueuePosition? = null
 
-  private val polling =
-    executor.scheduleWithFixedDelay(
-      {
-        controller.poll()
-        volume.poll()
-        handler.post(::refresh)
-      },
-      RendererController.POLL_INTERVAL_MS,
-      RendererController.POLL_INTERVAL_MS,
-      TimeUnit.MILLISECONDS,
-    )
+  @Volatile
+  private var polling: Future<*> = schedulePoll(RendererController.POLL_INTERVAL_MS)
 
   val mediaItems: List<MediaItem>
     get() = playlist.map { it.mediaItem }
@@ -224,6 +219,30 @@ class RendererPlayer(
   }
 
   private fun submit(block: () -> Unit): ListenableFuture<*> = executor.submit(block)
+
+  // the controller polls faster towards the end of a file
+  private fun schedulePoll(delayMs: Long): Future<*> =
+    executor.schedule(
+      {
+        // a poll running while the player is released would schedule the next one past the cancel
+        if (released.not()) {
+          // a poll that throws must not end the polling
+          val delayMs =
+            try {
+              controller.poll()
+              volume.poll()
+              controller.pollDelayMs()
+            } catch (e: Exception) {
+              Timber.w(e, "Renderer poll failed")
+              RendererController.POLL_INTERVAL_MS
+            }
+          handler.post(::refresh)
+          polling = schedulePoll(delayMs)
+        }
+      },
+      delayMs,
+      TimeUnit.MILLISECONDS,
+    )
 
   private fun refresh() {
     if (released) return

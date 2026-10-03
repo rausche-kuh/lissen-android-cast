@@ -10,6 +10,7 @@ import java.util.Locale
 
 class UpnpException(
   message: String,
+  val errorCode: Int? = null,
 ) : RendererException(message)
 
 class AvTransport(
@@ -26,6 +27,20 @@ class AvTransport(
     metadata: String,
   ) {
     service.invoke("SetAVTransportURI", "CurrentURI" to uri, "CurrentURIMetaData" to metadata)
+  }
+
+  /** Optional in AVTransport:1; a renderer without it answers with an action error, or with a bare HTTP error. */
+  override fun setNext(stream: CastStream?): Boolean {
+    val uri = stream?.url.orEmpty()
+    val metadata = stream?.let { didlLite(it.url, it.title, it.album, it.coverUrl, it.mimeType) }.orEmpty()
+
+    return try {
+      service.invoke("SetNextAVTransportURI", "NextURI" to uri, "NextURIMetaData" to metadata)
+      true
+    } catch (e: UpnpException) {
+      if (e.errorCode != null && e.errorCode !in UNSUPPORTED) throw e
+      false
+    }
   }
 
   override fun play() {
@@ -65,6 +80,9 @@ class AvTransport(
     }
 
   companion object {
+    // invalid action, action failed, optional action not implemented
+    private val UNSUPPORTED = setOf(401, 501, 602)
+
     /** `H+:MM:SS[.F+]`; `NOT_IMPLEMENTED` and anything unparsable give null. */
     internal fun parseTime(value: String): Long? {
       val parts = value.trim().split(':')

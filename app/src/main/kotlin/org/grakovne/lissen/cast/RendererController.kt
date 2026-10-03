@@ -23,6 +23,7 @@ data class RendererState(
  * only [state] is read from others.
  *
  * A file is loaded only once playback should run, so a paused queue never makes the renderer play.
+ * Towards the end of a playing file, the renderer is handed the next one, so it can go on without loading.
  */
 class RendererController(
   private val transport: Transport,
@@ -41,6 +42,11 @@ class RendererController(
   private var pollFailures = 0
   private var lastCommandAt = Long.MIN_VALUE / 2
   private var lastReport: TransportState? = null
+
+  // the file handed to the renderer to play after the loaded one, and the loaded file it was looked up for
+  private var next: Next? = null
+  private var nextFor: String? = null
+  private var preloads = true
 
   fun setQueue(
     chapters: List<QueueChapter>,
@@ -87,9 +93,11 @@ class RendererController(
       }
 
       // a seek is a new request for the file: one with a refreshed token loads it again
-      target != null && target.fileId == loadedFile && streamUrl(target.fileId) == loadedUrl -> {
+      target != null && target.fileId == loadedFile && streamUrl(target.fileId) == loadedUrl && wentOn().not() -> {
         Timber.d("Seeking to ${target.offsetMs}ms in file ${target.fileId}")
         transport.seek(target.offsetMs)
+        // a jump back to the start is no move into the next file
+        lastTrack = null
       }
 
       else -> {
@@ -109,6 +117,17 @@ class RendererController(
     runCatching { transport.close() }
     loadedFile = null
     loadedUrl = null
+  }
+
+  /** Polls fast towards the end of a file the renderer goes on from only once told, so the next file loads in time. */
+  fun pollDelayMs(): Long {
+    val file = loadedFile ?: return POLL_INTERVAL_MS
+    if (state.playing.not() || next != null) return POLL_INTERVAL_MS
+
+    val endMs = endMs(file, lastTrack) ?: return POLL_INTERVAL_MS
+    val at = queue.locate(QueuePosition(state.index, currentPositionMs()))?.takeIf { it.fileId == file } ?: return POLL_INTERVAL_MS
+
+    return if (endMs - at.offsetMs <= END_APPROACH_MS) FAST_POLL_INTERVAL_MS else POLL_INTERVAL_MS
   }
 
   fun poll() {
@@ -137,6 +156,7 @@ class RendererController(
     if (clock() - lastCommandAt < SETTLE_MS) return
 
     if (transportState == TransportState.PLAYING || transportState == TransportState.PAUSED) {
+      if (track.playsNext() || track.restarted(file)) return onAdvanced(track, playing = transportState == TransportState.PLAYING)
       if (track.playsAnother(file)) return command { onTakenOver(track) }
     }
 
@@ -147,6 +167,9 @@ class RendererController(
       TransportState.TRANSITIONING -> state = state.copy(loading = true)
       TransportState.UNKNOWN -> Unit
     }
+
+    // without a reported URI the move into the next file would go unnoticed
+    if (transportState == TransportState.PLAYING && loadedFile == file && track.uri() != null) queueNext(file, track)
   }
 
   /** The renderer is the authority on position and on play or pause, also when its own remote changed them. */
@@ -185,8 +208,88 @@ class RendererController(
 
   /** Renderers may rewrite the URI, but it keeps the file id; a missing URI is trusted. */
   private fun TrackPosition.playsAnother(file: String): Boolean {
-    val uri = trackUri?.takeIf { it.isNotBlank() && it != NOT_IMPLEMENTED } ?: return false
+    val uri = uri() ?: return false
     return uri.contains(file).not()
+  }
+
+  /** The renderer went on to the file it was handed as the next one; a rewritten URI keeps the file id. */
+  private fun TrackPosition.playsNext(): Boolean {
+    val next = next ?: return false
+    val uri = uri() ?: return false
+    return uri == next.url || (uri != loadedUrl && uri.contains(next.fileId))
+  }
+
+  /** Some renderers keep reporting the first URI: the position jumping from the end of the file to a start is the move. */
+  private fun TrackPosition.restarted(file: String): Boolean {
+    if (next == null) return false
+    val last = lastTrack?.relTimeMs ?: return false
+    val endMs = endMs(file, lastTrack) ?: return false
+    val relTimeMs = relTimeMs ?: return false
+    return last >= endMs - END_TOLERANCE_MS && relTimeMs < END_TOLERANCE_MS
+  }
+
+  /** The renderer may have gone on to the next file since the last poll. */
+  private fun wentOn(): Boolean = next != null && transport.positionInfo().playsNext()
+
+  private fun endMs(
+    file: String,
+    track: TrackPosition?,
+  ): Long? = track?.trackDurationMs?.takeIf { it > 0 } ?: queue.fileEndMs(file)
+
+  private fun TrackPosition.uri(): String? = trackUri?.takeIf { it.isNotBlank() && it != NOT_IMPLEMENTED }
+
+  /**
+   * Hands the renderer the file after [file], once per loaded file, close to its end, so the token in the URL is
+   * fresh when the renderer opens it. A file that doesn't start at its beginning can't go.
+   */
+  private fun queueNext(
+    file: String,
+    track: TrackPosition,
+  ) {
+    if (preloads.not() || nextFor == file) return
+    val endMs = endMs(file, track)
+    val relTimeMs = track.relTimeMs
+    if (endMs != null && relTimeMs != null && endMs - relTimeMs > NEXT_AHEAD_MS) return
+    nextFor = file
+
+    try {
+      val upcoming = queue.nextFile(file)?.takeIf { it.offsetMs < MIN_SEEK_MS } ?: return
+      val position = queue.resolve(upcoming) ?: return
+      val stream = streams.open(queue.chapters[position.index], upcoming.fileId)
+
+      if (transport.setNext(stream).not()) {
+        Timber.d("The renderer can't take a next file")
+        preloads = false
+        return
+      }
+
+      Timber.d("Handed the renderer file ${upcoming.fileId} to play next")
+      next = Next(upcoming.fileId, stream.url)
+    } catch (e: Exception) {
+      Timber.w(e, "The renderer rejected the next file")
+    }
+  }
+
+  /** The renderer went on to the next file by itself, without loading it. */
+  private fun onAdvanced(
+    track: TrackPosition,
+    playing: Boolean,
+  ) {
+    val upcoming = next ?: return
+    Timber.d("Renderer went on to file ${upcoming.fileId}")
+    loadedFile = upcoming.fileId
+    loadedUrl = upcoming.url
+    forgetNext()
+    follow(upcoming.fileId, track, playing)
+  }
+
+  /** Takes back the next file, so a renderer given another file doesn't go on into it. */
+  private fun dropNext() {
+    val handed = next != null
+    forgetNext()
+    if (handed.not()) return
+
+    runCatching { transport.setNext(null) }.onFailure { Timber.w(it, "Can't take back the next file") }
   }
 
   /** Another app plays on the renderer now: this queue pauses where it was and leaves the renderer to it. */
@@ -195,15 +298,23 @@ class RendererController(
     loadedFile = null
     loadedUrl = null
     lastTrack = null
+    forgetNext()
     state = state.copy(playing = false, playWhenReady = false, loading = false, positionAt = clock())
+  }
+
+  private fun forgetNext() {
+    next = null
+    nextFor = null
   }
 
   /** A file that played to its end moves on to the next one. Any other stop came from the renderer and counts as a pause. */
   private fun onStopped(file: String) {
     val track = lastTrack
-    val endMs = track?.trackDurationMs?.takeIf { it > 0 } ?: queue.fileEndMs(file)
+    val endMs = endMs(file, track)
     val relTimeMs = track?.relTimeMs
     val finished = state.playWhenReady && relTimeMs != null && endMs != null && relTimeMs >= endMs - END_TOLERANCE_MS
+    // a renderer may stop for a moment before it goes on to the file it was handed; the next poll sees the move
+    if (finished && next != null && awaitNext()) return
     // the token in the URL expired, and the renderer stopped at its next request
     val stale = finished.not() && state.playWhenReady && streamUrl(file) != loadedUrl
 
@@ -249,6 +360,7 @@ class RendererController(
     val stream = streams.open(queue.chapters[state.index], target.fileId)
     state = state.copy(loading = true)
 
+    dropNext()
     // a renderer left paused by an earlier session keeps its old stream and resumes it on play
     if (transport.transportState() !in IDLE) transport.stop()
     transport.setUri(stream)
@@ -265,6 +377,16 @@ class RendererController(
     state = state.copy(loading = false, playing = true, positionAt = clock())
   }
 
+  private fun awaitNext(): Boolean {
+    val deadline = clock() + NEXT_START_MS
+
+    while (clock() <= deadline) {
+      sleep(LOAD_POLL_MS)
+      if (transport.transportState() == TransportState.PLAYING) return true
+    }
+    return false
+  }
+
   private fun awaitPlaying() {
     val deadline = clock() + LOAD_TIMEOUT_MS
 
@@ -275,6 +397,7 @@ class RendererController(
   }
 
   private fun unload() {
+    dropNext()
     if (loadedFile != null) transport.stop()
     loadedFile = null
     loadedUrl = null
@@ -350,6 +473,10 @@ class RendererController(
 
   companion object {
     const val POLL_INTERVAL_MS = 1000L
+    private const val FAST_POLL_INTERVAL_MS = 250L
+    private const val END_APPROACH_MS = 3000L
+    private const val NEXT_AHEAD_MS = 60_000L
+    private const val NEXT_START_MS = 3000L
     private const val MAX_POLL_FAILURES = 3
     private const val SETTLE_MS = 2000L
     private const val END_TOLERANCE_MS = 3000L
@@ -364,3 +491,8 @@ class RendererController(
     private val IDLE = setOf(TransportState.STOPPED, TransportState.NO_MEDIA)
   }
 }
+
+private class Next(
+  val fileId: String,
+  val url: String,
+)

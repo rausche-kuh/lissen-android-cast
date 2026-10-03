@@ -3,10 +3,12 @@ package org.grakovne.lissen.cast.upnp
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.OkHttpClient
+import org.grakovne.lissen.cast.CastStream
 import org.grakovne.lissen.cast.TrackPosition
 import org.grakovne.lissen.cast.TransportState
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -58,6 +60,59 @@ class AvTransportTest {
     )
     assertTrue(actions[0].body!!.utf8().contains("<Speed>1</Speed>"))
     assertTrue(actions[3].body!!.utf8().contains("<Unit>REL_TIME</Unit><Target>1:02:05</Target>"))
+  }
+
+  @Test
+  fun `the next stream is handed over with its metadata and taken back with an empty URI`() {
+    repeat(2) { server.enqueue(ok("SetNextAVTransportURI")) }
+
+    assertTrue(transport.setNext(CastStream("http://abs/b?token=a&b", "Two")))
+    assertTrue(transport.setNext(null))
+
+    val handed = server.takeRequest().body!!.utf8()
+    assertTrue(handed.contains("<NextURI>http://abs/b?token=a&amp;b</NextURI>"))
+    assertTrue(handed.contains("<NextURIMetaData>&lt;DIDL-Lite"))
+    assertTrue(
+      server
+        .takeRequest()
+        .body!!
+        .utf8()
+        .contains("<NextURI></NextURI>"),
+    )
+  }
+
+  @Test
+  fun `a renderer without the next URI action can't take a next stream`() {
+    server.enqueue(
+      MockResponse
+        .Builder()
+        .code(500)
+        .body(fault(401))
+        .build(),
+    )
+    server.enqueue(
+      MockResponse
+        .Builder()
+        .code(500)
+        .body(fault(501))
+        .build(),
+    )
+    server.enqueue(MockResponse.Builder().code(500).build())
+
+    repeat(3) { assertFalse(transport.setNext(CastStream("http://abs/b", "Two"))) }
+  }
+
+  @Test
+  fun `any other error on the next stream is a failure`() {
+    server.enqueue(
+      MockResponse
+        .Builder()
+        .code(500)
+        .body(fault(718))
+        .build(),
+    )
+
+    assertThrows<UpnpException> { transport.setNext(CastStream("http://abs/b", "Two")) }
   }
 
   @Test
@@ -142,6 +197,13 @@ class AvTransportTest {
     assertEquals("0:00:59", AvTransport.formatTime(59_999))
     assertEquals("12:34:56", AvTransport.formatTime(45_296_000))
   }
+
+  private fun fault(code: Int): String =
+    """
+    <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><s:Fault>
+    <faultcode>s:Client</faultcode><faultstring>UPnPError</faultstring><detail>
+    <UPnPError xmlns="urn:schemas-upnp-org:control-1-0"><errorCode>$code</errorCode></UPnPError></detail></s:Fault></s:Body></s:Envelope>
+    """.trimIndent()
 
   private fun ok(
     action: String,

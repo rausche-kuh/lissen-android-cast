@@ -1,5 +1,6 @@
 package org.grakovne.lissen.cast
 
+import org.grakovne.lissen.playback.service.FileClip
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -11,12 +12,20 @@ class RendererControllerTest {
   private var now = 0L
   private val transport = FakeTransport()
   private var token = ""
+  private var unopenable: String? = null
+  private var onSleep: () -> Unit = {}
   private val controller =
     RendererController(
       transport = transport,
-      streams = { chapter, fileId -> CastStream("http://abs/$fileId$token", chapter.title) },
+      streams = { chapter, fileId ->
+        if (fileId == unopenable) throw RendererException("no token")
+        CastStream("http://abs/$fileId$token", chapter.title)
+      },
       clock = { now },
-      sleep = { now += it },
+      sleep = {
+        now += it
+        onSleep()
+      },
     )
 
   @Test
@@ -307,6 +316,206 @@ class RendererControllerTest {
     assertNotNull(controller.state.failure)
   }
 
+  @Test
+  fun `a playing file hands the renderer the next file once, close to its end`() {
+    transport.takesNext = true
+    start(index = 1, positionMs = 0)
+    settle()
+    transport.commands.clear()
+
+    transport.track = TrackPosition(relTimeMs = 310_000, trackDurationMs = 600_000, trackUri = "http://abs/a")
+    controller.poll()
+    assertEquals(emptyList<String>(), transport.commands)
+
+    transport.track = TrackPosition(relTimeMs = 560_000, trackDurationMs = 600_000, trackUri = "http://abs/a")
+    controller.poll()
+    controller.poll()
+
+    assertEquals(listOf("setNext http://abs/b Two"), transport.commands)
+  }
+
+  @Test
+  fun `the renderer going on to the next file moves the queue without loading it`() {
+    transport.takesNext = true
+    start(index = 1, positionMs = 0)
+    settle()
+    transport.track = TrackPosition(relTimeMs = 599_000, trackDurationMs = 600_000, trackUri = "http://abs/a")
+    controller.poll()
+    transport.commands.clear()
+
+    transport.track = TrackPosition(relTimeMs = 105_000, trackDurationMs = 400_000, trackUri = "http://abs/b")
+    controller.poll()
+
+    assertEquals(emptyList<String>(), transport.commands)
+    assertEquals(QueuePosition(2, 5_000), controller.state.position)
+    assertEquals(1, controller.state.autoTransitions)
+    assertTrue(controller.state.playWhenReady)
+
+    // the renderer plays the file it went on to, and is not seen as taken over
+    settle()
+    transport.track = TrackPosition(relTimeMs = 110_000, trackDurationMs = 400_000, trackUri = "http://abs/b")
+    controller.poll()
+
+    assertTrue(controller.state.playWhenReady)
+    assertEquals(2, controller.state.index)
+  }
+
+  @Test
+  fun `a renderer reporting the first URI in the next file still moves the queue`() {
+    transport.takesNext = true
+    start(index = 1, positionMs = 0)
+    settle()
+    transport.track = TrackPosition(relTimeMs = 599_000, trackDurationMs = 600_000, trackUri = "http://abs/a")
+    controller.poll()
+    transport.commands.clear()
+
+    settle()
+    transport.track = TrackPosition(relTimeMs = 500, trackDurationMs = 600_000, trackUri = "http://abs/a")
+    controller.poll()
+
+    assertEquals(emptyList<String>(), transport.commands)
+    assertEquals(QueuePosition(1, 300_500), controller.state.position)
+  }
+
+  @Test
+  fun `a renderer that stops for a moment before the next file is not loaded again`() {
+    transport.takesNext = true
+    start(index = 1, positionMs = 0)
+    settle()
+    transport.track = TrackPosition(relTimeMs = 599_000, trackDurationMs = 600_000, trackUri = "http://abs/a")
+    controller.poll()
+    transport.commands.clear()
+
+    transport.state = TransportState.STOPPED
+    onSleep = {
+      transport.state = TransportState.PLAYING
+      transport.track = TrackPosition(relTimeMs = 1_000, trackDurationMs = 100_000, trackUri = "http://abs/b")
+    }
+    controller.poll()
+    settle()
+    controller.poll()
+
+    assertEquals(emptyList<String>(), transport.commands)
+    assertEquals(QueuePosition(1, 301_000), controller.state.position)
+  }
+
+  @Test
+  fun `a renderer that stays stopped instead of going on to the next file loads it`() {
+    transport.takesNext = true
+    start(index = 1, positionMs = 0)
+    settle()
+    transport.track = TrackPosition(relTimeMs = 599_000, trackDurationMs = 600_000, trackUri = "http://abs/a")
+    controller.poll()
+    transport.commands.clear()
+
+    transport.state = TransportState.STOPPED
+    controller.poll()
+
+    assertEquals(listOf("setNext null", "setUri http://abs/b Two", "play"), transport.commands)
+  }
+
+  @Test
+  fun `a seek after the renderer went on to the next file loads the file again`() {
+    transport.takesNext = true
+    start(index = 1, positionMs = 0)
+    settle()
+    transport.track = TrackPosition(relTimeMs = 599_000, trackDurationMs = 600_000, trackUri = "http://abs/a")
+    controller.poll()
+    transport.commands.clear()
+
+    transport.track = TrackPosition(relTimeMs = 1_000, trackDurationMs = 100_000, trackUri = "http://abs/b")
+    controller.seek(1, 100_000)
+
+    assertEquals(listOf("setNext null", "stop", "setUri http://abs/a Two", "play", "seek 400000"), transport.commands)
+  }
+
+  @Test
+  fun `a next file that can't be opened leaves the renderer playing`() {
+    transport.takesNext = true
+    start(index = 1, positionMs = 0)
+    settle()
+    unopenable = "b"
+
+    transport.track = TrackPosition(relTimeMs = 599_000, trackDurationMs = 600_000, trackUri = "http://abs/a")
+    controller.poll()
+
+    assertNull(controller.state.failure)
+    assertFalse(transport.commands.any { it.startsWith("setNext") })
+  }
+
+  @Test
+  fun `a seek into another file takes the next file back first`() {
+    transport.takesNext = true
+    start(index = 0, positionMs = 0)
+    settle()
+    transport.track = TrackPosition(relTimeMs = 570_000, trackDurationMs = 600_000, trackUri = "http://abs/a")
+    controller.poll()
+    transport.commands.clear()
+
+    controller.seek(2, 50_000)
+
+    assertEquals(listOf("setNext null", "stop", "setUri http://abs/b Three", "play", "seek 150000"), transport.commands)
+  }
+
+  @Test
+  fun `a renderer that can't take a next file is not asked again`() {
+    start(index = 0, positionMs = 0)
+    settle()
+    transport.track = TrackPosition(relTimeMs = 570_000, trackDurationMs = 600_000, trackUri = "http://abs/a")
+    controller.poll()
+    controller.seek(0, 0)
+    settle()
+    controller.poll()
+
+    assertEquals(1, transport.commands.count { it.startsWith("setNext") })
+  }
+
+  @Test
+  fun `a next file that doesn't start at its beginning is not handed over`() {
+    transport.takesNext = true
+    val chapters =
+      listOf(
+        QueueChapter("book", "One", null, listOf(FileClip("a", 0.0, 10.0))),
+        QueueChapter("book", "Two", null, listOf(FileClip("b", 5.0, 20.0))),
+      )
+    controller.setQueue(chapters, 0, 0)
+    controller.prepare()
+    controller.setPlayWhenReady(true)
+    settle()
+
+    transport.track = TrackPosition(relTimeMs = 2_000, trackDurationMs = 10_000, trackUri = "http://abs/a")
+    controller.poll()
+
+    assertFalse(transport.commands.any { it.startsWith("setNext") })
+  }
+
+  @Test
+  fun `the end of a file the renderer has no next one for is polled fast`() {
+    start(index = 0, positionMs = 0)
+    settle()
+
+    transport.track = TrackPosition(relTimeMs = 100_000, trackDurationMs = 600_000)
+    controller.poll()
+    assertEquals(RendererController.POLL_INTERVAL_MS, controller.pollDelayMs())
+
+    settle()
+    transport.track = TrackPosition(relTimeMs = 598_000, trackDurationMs = 600_000)
+    controller.poll()
+    assertTrue(controller.pollDelayMs() < RendererController.POLL_INTERVAL_MS)
+  }
+
+  @Test
+  fun `the end of a file the renderer goes on from by itself is polled as usual`() {
+    transport.takesNext = true
+    start(index = 1, positionMs = 0)
+    settle()
+
+    transport.track = TrackPosition(relTimeMs = 598_000, trackDurationMs = 600_000, trackUri = "http://abs/a")
+    controller.poll()
+
+    assertEquals(RendererController.POLL_INTERVAL_MS, controller.pollDelayMs())
+  }
+
   private fun start(
     index: Int,
     positionMs: Long,
@@ -330,6 +539,7 @@ class RendererControllerTest {
     var failing = false
     var startsPlaying = true
     var dropsSeeks = 0
+    var takesNext = false
 
     override fun setUri(stream: CastStream) {
       commands += "setUri ${stream.url} ${stream.title}"
@@ -354,6 +564,11 @@ class RendererControllerTest {
     override fun seek(positionMs: Long) {
       commands += "seek $positionMs"
       if (dropsSeeks-- <= 0) track = track.copy(relTimeMs = positionMs)
+    }
+
+    override fun setNext(stream: CastStream?): Boolean {
+      commands += "setNext ${stream?.let { "${it.url} ${it.title}" }}"
+      return takesNext
     }
 
     override fun positionInfo(): TrackPosition = track.also { if (failing) throw RendererException("timeout") }

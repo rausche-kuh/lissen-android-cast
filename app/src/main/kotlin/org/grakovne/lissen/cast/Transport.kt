@@ -45,6 +45,12 @@ interface Transport {
 
   fun seek(positionMs: Long)
 
+  /**
+   * Hands the device the stream to play once the current one ends, so it buffers it in time; null takes it back.
+   * False when the device can't, and it is not asked again.
+   */
+  fun setNext(stream: CastStream?): Boolean = false
+
   fun positionInfo(): TrackPosition
 
   fun transportState(): TransportState
