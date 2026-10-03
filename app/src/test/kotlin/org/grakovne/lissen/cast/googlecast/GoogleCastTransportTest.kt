@@ -18,6 +18,7 @@ import org.junit.jupiter.api.assertThrows
 import su.litvak.chromecast.api.v2.ChromeCast
 import su.litvak.chromecast.api.v2.Media
 import su.litvak.chromecast.api.v2.MediaStatus
+import su.litvak.chromecast.api.v2.Request
 import su.litvak.chromecast.api.v2.Status
 
 class GoogleCastTransportTest {
@@ -113,6 +114,69 @@ class GoogleCastTransportTest {
   }
 
   @Test
+  fun `a next stream is appended to the queue to buffer ahead`() {
+    running(MEDIA_RECEIVER_APP_ID)
+    every { cast.mediaStatus } returns status(MediaStatus.PlayerState.PLAYING)
+    val request = slot<Request>()
+    every { cast.send(any<String>(), capture(request), QueueResponse::class.java) } returns answer("MEDIA_STATUS")
+
+    assertTrue(transport.setNext(CastStream("http://abs/b", "Two", "Book", mimeType = "audio/mp4")))
+
+    verify { cast.send("urn:x-cast:com.google.cast.media", any<Request>(), QueueResponse::class.java) }
+    val sent = json.readTree(json.writeValueAsString(request.captured))
+    assertEquals("QUEUE_INSERT", sent["type"].asText())
+    assertEquals(7, sent["mediaSessionId"].asLong())
+    val item = sent["items"][0]
+    assertEquals("http://abs/b", item["media"]["contentId"].asText())
+    assertEquals("audio/mp4", item["media"]["contentType"].asText())
+    assertEquals("Two", item["media"]["metadata"][Media.METADATA_TITLE].asText())
+    assertTrue(item["autoplay"].asBoolean())
+    assertTrue(item["preloadTime"].asDouble() > 0)
+  }
+
+  @Test
+  fun `a next stream the receiver rejects fails`() {
+    running(MEDIA_RECEIVER_APP_ID)
+    every { cast.mediaStatus } returns status(MediaStatus.PlayerState.PLAYING)
+    every { cast.send(any<String>(), any<Request>(), QueueResponse::class.java) } returns answer("INVALID_REQUEST")
+
+    assertThrows<RendererException> { transport.setNext(CastStream("http://abs/b", "Two")) }
+  }
+
+  @Test
+  fun `taking the next stream back removes the inserted item`() {
+    running(MEDIA_RECEIVER_APP_ID)
+    every { cast.mediaStatus } returns status(MediaStatus.PlayerState.PLAYING)
+    val requests = mutableListOf<Request>()
+    every { cast.send(any<String>(), capture(requests), QueueResponse::class.java) } returns answer("MEDIA_STATUS")
+    transport.setNext(CastStream("http://abs/b", "Two"))
+
+    assertTrue(transport.setNext(null))
+
+    val sent = json.readTree(json.writeValueAsString(requests.last()))
+    assertEquals("QUEUE_REMOVE", sent["type"].asText())
+    assertEquals(listOf(2L), sent["itemIds"].map { it.asLong() })
+  }
+
+  @Test
+  fun `taking back a next stream that was never handed over sends nothing`() {
+    assertTrue(transport.setNext(null))
+
+    verify(exactly = 0) { cast.send(any<String>(), any<Request>(), QueueResponse::class.java) }
+  }
+
+  @Test
+  fun `the receiver going on to the next item reports its URI and forgets the old duration`() {
+    running(MEDIA_RECEIVER_APP_ID)
+    every { cast.mediaStatus } returns status(MediaStatus.PlayerState.PLAYING, 3599.0, media("http://abs/a", 3600.0))
+    transport.positionInfo()
+
+    every { cast.mediaStatus } returns status(MediaStatus.PlayerState.PLAYING, 1.0, media("http://abs/b", null))
+
+    assertEquals(TrackPosition(relTimeMs = 1_000, trackDurationMs = null, trackUri = "http://abs/b"), transport.positionInfo())
+  }
+
+  @Test
   fun `commands go to the media receiver`() {
     running(MEDIA_RECEIVER_APP_ID)
     every { cast.mediaStatus } returns status(MediaStatus.PlayerState.PAUSED)
@@ -200,7 +264,7 @@ class GoogleCastTransportTest {
 
   private fun media(
     url: String,
-    duration: Double,
+    duration: Double?,
   ) = ""","media":{"contentId":"$url","contentType":"audio/mpeg","duration":$duration}"""
 
   private fun status(
@@ -209,6 +273,14 @@ class GoogleCastTransportTest {
     media: String = "",
   ): MediaStatus =
     json.readValue("""{"mediaSessionId":7,"playerState":"$state","currentTime":$currentTime$media}""", MediaStatus::class.java)
+
+  /** The receiver's answer as the library hands it over, with the type renamed; the queue holds the playing item 1 and the inserted 2. */
+  private fun answer(type: String): QueueResponse =
+    json.readValue(
+      """{"responseType":"$type","requestId":1,"status":[{"mediaSessionId":7,"playerState":"PLAYING","currentTime":0,""" +
+        """"currentItemId":1,"items":[{"itemId":1,"autoplay":true},{"itemId":2,"autoplay":true}]}]}""",
+      QueueResponse::class.java,
+    )
 
   private companion object {
     val json: ObjectMapper = ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)

@@ -297,4 +297,5 @@
     <string name="cast_no_devices">No devices found on this network</string>
     <string name="cast_unavailable_offline">Casting is not available in offline mode</string>
     <string name="cast_connection_lost">Lost the cast device, playback moved back to this device</string>
+    <string name="cast_connecting">Connecting to the cast device</string>
 </resources>

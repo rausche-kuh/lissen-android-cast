@@ -17,6 +17,7 @@ import androidx.compose.material.icons.rounded.PauseCircleFilled
 import androidx.compose.material.icons.rounded.PlayCircleFilled
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme.colorScheme
@@ -64,6 +65,8 @@ fun TrackControlComposable(
   val chapters = book?.chapters ?: emptyList()
 
   val view: View = LocalView.current
+  val connecting = isCastConnecting()
+  val controlTint = if (connecting) colorScheme.onBackground.copy(alpha = 0.3f) else colorScheme.onBackground
 
   var sliderPosition by remember { mutableDoubleStateOf(0.0) }
   var isDragging by remember { mutableStateOf(false) }
@@ -103,6 +106,7 @@ fun TrackControlComposable(
           viewModel.seekTo(sliderPosition)
         },
         valueRange = 0f..safeSliderDuration(currentTrackDuration),
+        enabled = connecting.not(),
         colors =
           SliderDefaults.colors(
             thumbColor = colorScheme.primary,
@@ -161,23 +165,24 @@ fun TrackControlComposable(
           onClick = {
             withHaptic(view) { viewModel.previousTrack() }
           },
-          enabled = true,
+          enabled = connecting.not(),
         ) {
           Icon(
             imageVector = Icons.Rounded.SkipPrevious,
             contentDescription = stringResource(R.string.a11y_previous_track),
-            tint = colorScheme.onBackground,
+            tint = controlTint,
             modifier = Modifier.size(36.dp),
           )
         }
 
         IconButton(
           onClick = { withHaptic(view) { viewModel.rewind() } },
+          enabled = connecting.not(),
         ) {
           Icon(
             imageVector = provideReplayIcon(seekTime),
             contentDescription = stringResource(R.string.a11y_rewind_seconds, seekTime.rewind),
-            tint = colorScheme.onBackground,
+            tint = controlTint,
             modifier = Modifier.size(48.dp),
           )
         }
@@ -185,22 +190,40 @@ fun TrackControlComposable(
         IconButton(
           onClick = { withHaptic(view) { viewModel.togglePlayPause() } },
           modifier = Modifier.size(72.dp),
+          enabled = connecting.not(),
         ) {
-          Icon(
-            imageVector = if (isPlaying) Icons.Rounded.PauseCircleFilled else Icons.Rounded.PlayCircleFilled,
-            contentDescription = if (isPlaying) stringResource(R.string.a11y_pause) else stringResource(R.string.a11y_play),
-            tint = colorScheme.primary,
-            modifier = Modifier.fillMaxSize(),
-          )
+          when (connecting) {
+            true -> {
+              val connectingLabel = stringResource(R.string.cast_connecting)
+              CircularProgressIndicator(
+                color = colorScheme.primary,
+                modifier =
+                  Modifier
+                    .fillMaxSize()
+                    .padding(8.dp)
+                    .semantics { contentDescription = connectingLabel },
+              )
+            }
+
+            false -> {
+              Icon(
+                imageVector = if (isPlaying) Icons.Rounded.PauseCircleFilled else Icons.Rounded.PlayCircleFilled,
+                contentDescription = if (isPlaying) stringResource(R.string.a11y_pause) else stringResource(R.string.a11y_play),
+                tint = colorScheme.primary,
+                modifier = Modifier.fillMaxSize(),
+              )
+            }
+          }
         }
 
         IconButton(
           onClick = { withHaptic(view) { viewModel.forward() } },
+          enabled = connecting.not(),
         ) {
           Icon(
             imageVector = provideForwardIcon(seekTime),
             contentDescription = stringResource(R.string.a11y_fast_forward_seconds, seekTime.forward),
-            tint = colorScheme.onBackground,
+            tint = controlTint,
             modifier = Modifier.size(48.dp),
           )
         }
@@ -211,14 +234,14 @@ fun TrackControlComposable(
               withHaptic(view) { viewModel.nextTrack() }
             }
           },
-          enabled = currentTrackIndex < chapters.size - 1,
+          enabled = currentTrackIndex < chapters.size - 1 && connecting.not(),
         ) {
           Icon(
             imageVector = Icons.Rounded.SkipNext,
             contentDescription = stringResource(R.string.a11y_next_track),
             tint =
               if (currentTrackIndex < chapters.size - 1) {
-                colorScheme.onBackground
+                controlTint
               } else {
                 colorScheme.onBackground.copy(
                   alpha = 0.3f,

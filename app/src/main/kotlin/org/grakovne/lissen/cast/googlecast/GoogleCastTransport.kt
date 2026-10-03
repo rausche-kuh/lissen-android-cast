@@ -25,24 +25,43 @@ class GoogleCastTransport(
   private var contentId: String? = null
   private var durationMs: Long? = null
 
+  // the queue item handed over as the next one
+  private var nextItemId: Long? = null
+
   override fun setUri(stream: CastStream) {
     if (mediaApp() == null) {
       Timber.d("Launching the media receiver")
       cast.launchApp(MEDIA_RECEIVER_APP_ID) ?: throw RendererException("The media receiver did not start")
     }
 
-    val metadata =
-      mapOf(
-        Media.METADATA_TYPE to Media.MetadataType.MUSIC_TRACK.ordinal,
-        Media.METADATA_TITLE to stream.title,
-        Media.METADATA_ALBUM_NAME to stream.album,
-        Media.METADATA_IMAGES to listOfNotNull(stream.coverUrl?.let { mapOf("url" to it) }),
-      ).filterValues { it != null }
-
-    val media = Media(stream.url, stream.mimeType ?: DEFAULT_CONTENT_TYPE, null, Media.StreamType.BUFFERED, null, metadata, null, null)
     contentId = stream.url
     durationMs = null
-    cast.load(media)?.let(::remember) ?: throw RendererException("The media receiver did not load ${stream.url}")
+    nextItemId = null
+    cast.load(stream.toMedia())?.let(::remember) ?: throw RendererException("The media receiver did not load ${stream.url}")
+  }
+
+  /** Appends the stream to the queue the load started, and the receiver buffers it ahead; null removes it again. */
+  override fun setNext(stream: CastStream?): Boolean {
+    if (stream == null) {
+      val itemId = nextItemId ?: return true
+      nextItemId = null
+      mediaStatus()?.let { queue(QueueRemove(it.mediaSessionId, listOf(itemId))) }
+      return true
+    }
+
+    val status = mediaStatus() ?: throw RendererException("QUEUE_INSERT without media on the media receiver")
+    val answer = queue(QueueInsert(status.mediaSessionId, listOf(QueueItem(stream.toMedia(), PRELOAD_SECONDS))))
+    val inserted = answer.status?.firstOrNull()
+    nextItemId = inserted?.items?.lastOrNull { it.id != inserted.currentItemId?.toLong() }?.id
+    return true
+  }
+
+  private fun queue(request: QueueRequest): QueueResponse {
+    val answer =
+      cast.send(MEDIA_NAMESPACE, request, QueueResponse::class.java)
+        ?: throw RendererException("${request.type} got no answer")
+    if (answer.responseType != MEDIA_STATUS) throw RendererException("${request.type} failed: ${answer.responseType} ${answer.reason}")
+    return answer
   }
 
   override fun play() {
@@ -118,16 +137,35 @@ class GoogleCastTransport(
     mediaStatus() ?: throw RendererException("$command without media on the media receiver")
   }
 
+  /** The receiver goes on to the next item in its queue by itself, and the status shows its media from then on. */
   private fun remember(status: MediaStatus): MediaStatus {
     status.media?.let { media ->
-      contentId = media.url ?: contentId
+      if (media.url != null && media.url != contentId) {
+        contentId = media.url
+        durationMs = null
+      }
       durationMs = media.duration?.let { (it * 1000).toLong() } ?: durationMs
     }
     return status
   }
 
+  private fun CastStream.toMedia(): Media {
+    val metadata =
+      mapOf(
+        Media.METADATA_TYPE to Media.MetadataType.MUSIC_TRACK.ordinal,
+        Media.METADATA_TITLE to title,
+        Media.METADATA_ALBUM_NAME to album,
+        Media.METADATA_IMAGES to listOfNotNull(coverUrl?.let { mapOf("url" to it) }),
+      ).filterValues { it != null }
+
+    return Media(url, mimeType ?: DEFAULT_CONTENT_TYPE, null, Media.StreamType.BUFFERED, null, metadata, null, null)
+  }
+
   companion object {
     const val MEDIA_RECEIVER_APP_ID = "CC1AD845"
     private const val DEFAULT_CONTENT_TYPE = "audio/mpeg"
+    private const val MEDIA_NAMESPACE = "urn:x-cast:com.google.cast.media"
+    private const val MEDIA_STATUS = "MEDIA_STATUS"
+    private const val PRELOAD_SECONDS = 20.0
   }
 }

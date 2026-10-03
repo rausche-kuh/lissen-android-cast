@@ -35,6 +35,7 @@ internal class SoapService(
         val description = fault?.childText("errorDescription")
         throw UpnpException(
           "$action failed: HTTP ${response.code}${code?.let { ", UPnP error $it" }.orEmpty()}${description?.let { " ($it)" }.orEmpty()}",
+          code?.trim()?.toIntOrNull(),
         )
       }
 

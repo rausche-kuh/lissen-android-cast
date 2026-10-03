@@ -25,6 +25,8 @@ class CastViewModel
   ) : ViewModel() {
     val active: StateFlow<CastDevice?> = castSession.device
 
+    val connecting: StateFlow<Boolean> = castSession.connecting
+
     /** Cast devices stream from the server, so offline mode has nothing to offer them. */
     val available: StateFlow<Boolean> =
       libraryPreferences.forceCacheFlow

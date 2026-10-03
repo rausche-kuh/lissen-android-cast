@@ -62,5 +62,7 @@
 
 # chromecast-java-api-v2 — Jackson maps the Cast messages onto these classes by reflection
 -keep class su.litvak.chromecast.api.v2.** { *; }
+# queue requests and answers of our own, which Jackson writes and reads by their getters and setters
+-keep class org.grakovne.lissen.cast.googlecast.Queue* { *; }
 -dontwarn com.fasterxml.jackson.databind.ext.**
 -dontwarn org.slf4j.impl.**

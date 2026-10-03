@@ -47,6 +47,10 @@ class CastSession
     private val _device = MutableStateFlow<CastDevice?>(null)
     val device: StateFlow<CastDevice?> = _device.asStateFlow()
 
+    /** The device was asked to play and hasn't started yet. */
+    private val _connecting = MutableStateFlow(false)
+    val connecting: StateFlow<Boolean> = _connecting.asStateFlow()
+
     private var player: RendererPlayer? = null
     private val scope = MainScope()
     private val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
@@ -64,7 +68,7 @@ class CastSession
         override fun onEvents(
           player: Player,
           events: Player.Events,
-        ) = holdLocks(player.keepsPolling)
+        ) = follow(player)
       }
 
     init {
@@ -87,7 +91,7 @@ class CastSession
       handOver(from = activePlayer.current, to = remote)
       previous?.let(::release)
       remote.addListener(lockListener)
-      holdLocks(remote.keepsPolling)
+      follow(remote)
     }
 
     fun disconnect() = disconnect(resume = null)
@@ -205,6 +209,12 @@ class CastSession
       remote.removeListener(lockListener)
       remote.release()
       holdLocks(false)
+      _connecting.value = false
+    }
+
+    private fun follow(player: Player) {
+      holdLocks(player.keepsPolling)
+      _connecting.value = (player as? RendererPlayer)?.connecting == true
     }
 
     @SuppressLint("WakelockTimeout")
