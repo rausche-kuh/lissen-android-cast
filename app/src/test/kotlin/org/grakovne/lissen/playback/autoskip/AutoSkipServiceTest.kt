@@ -21,6 +21,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
+import org.grakovne.lissen.cast.ActivePlayer
 import org.grakovne.lissen.domain.DetailedItem
 import org.grakovne.lissen.playback.PlaybackFixtures.chapter
 import org.grakovne.lissen.playback.PlaybackFixtures.podcast
@@ -121,7 +122,7 @@ class AutoSkipServiceTest {
     configure(AutoSkipConfiguration(introSeconds = 10, outroSeconds = 10))
 
     service =
-      AutoSkipService(player, preferences, syncState, playbackTimer, synchronization, steps).also {
+      AutoSkipService(ActivePlayer(player), preferences, syncState, playbackTimer, synchronization, steps).also {
         it.onCreate()
       }
     buildQueue(book, at = 0, positionMs = 15_000L)

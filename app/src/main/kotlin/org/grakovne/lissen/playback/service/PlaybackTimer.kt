@@ -4,7 +4,7 @@ import androidx.annotation.OptIn
 import androidx.annotation.VisibleForTesting
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
+import org.grakovne.lissen.cast.ActivePlayer
 import org.grakovne.lissen.domain.CurrentEpisodeTimerOption
 import org.grakovne.lissen.domain.TimerOption
 import org.grakovne.lissen.playback.PlaybackEvent
@@ -18,8 +18,12 @@ class PlaybackTimer
   @Inject
   constructor(
     private val playbackEventBus: PlaybackEventBus,
-    private val exoPlayer: ExoPlayer,
+    private val activePlayer: ActivePlayer,
   ) {
+    // the renderer while casting
+    private val exoPlayer: Player
+      get() = activePlayer.current
+
     private var option: TimerOption? = null
     private var timer: Countdown? = null
 
@@ -74,8 +78,8 @@ class PlaybackTimer
 
       timer = countdownFactory.create(totalMillis, 500L, { seconds -> broadcastRemaining(seconds) }, { expire() })
 
-      exoPlayer.removeListener(playerListener)
-      exoPlayer.addListener(playerListener)
+      activePlayer.removeListener(playerListener)
+      activePlayer.addListener(playerListener)
 
       this.option = option
       if (exoPlayer.isPlaying.not() && option == CurrentEpisodeTimerOption) {
@@ -107,6 +111,6 @@ class PlaybackTimer
       timer?.stop()
       timer = null
 
-      exoPlayer.removeListener(playerListener)
+      activePlayer.removeListener(playerListener)
     }
   }

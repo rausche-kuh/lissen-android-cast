@@ -4,7 +4,6 @@ import android.os.SystemClock
 import androidx.annotation.VisibleForTesting
 import androidx.media3.common.C
 import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -14,6 +13,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.grakovne.lissen.cast.ActivePlayer
 import org.grakovne.lissen.channel.common.OperationError
 import org.grakovne.lissen.content.LissenMediaProvider
 import org.grakovne.lissen.domain.DetailedItem
@@ -29,7 +29,7 @@ import javax.inject.Singleton
 class PlaybackSynchronizationService
   @Inject
   constructor(
-    private val exoPlayer: ExoPlayer,
+    private val activePlayer: ActivePlayer,
     private val mediaProvider: LissenMediaProvider,
     private val sharedPreferences: SessionPreferences,
     private val syncState: SyncStateStore,
@@ -42,8 +42,12 @@ class PlaybackSynchronizationService
     private var syncJob: Job? = null
     private val syncRunner = CoalescingRunner<SyncSnapshot>()
 
+    // the renderer while casting
+    private val exoPlayer: Player
+      get() = activePlayer.current
+
     init {
-      exoPlayer.addListener(
+      activePlayer.addListener(
         object : Player.Listener {
           override fun onEvents(
             player: Player,
@@ -241,7 +245,7 @@ class PlaybackSynchronizationService
         )
     }
 
-    private fun getProgress(exoPlayer: ExoPlayer): PlaybackProgress? =
+    private fun getProgress(exoPlayer: Player): PlaybackProgress? =
       exoPlayer.currentMediaItem
         ?.mediaMetadata
         ?.extras

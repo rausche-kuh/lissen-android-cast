@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
+import org.grakovne.lissen.cast.ActivePlayer
 import org.grakovne.lissen.channel.common.OperationResult
 import org.grakovne.lissen.content.LissenMediaProvider
 import org.grakovne.lissen.domain.PlaybackProgress
@@ -55,7 +56,7 @@ class ChapterEndReportTest {
     coEvery { mediaProvider.startPlayback(any(), any(), any(), any(), any()) } returns OperationResult.Success(session)
 
     service =
-      PlaybackSynchronizationService(player, mediaProvider, sessionPreferences, syncState).apply {
+      PlaybackSynchronizationService(ActivePlayer(player), mediaProvider, sessionPreferences, syncState).apply {
         ioDispatcher = StandardTestDispatcher(scheduler)
       }
     service.startPlaybackSynchronization(item)

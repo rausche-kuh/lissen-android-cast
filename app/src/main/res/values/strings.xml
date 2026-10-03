@@ -195,6 +195,7 @@
     <string name="equalizer_restore_default">Restore default</string>
     <string name="a11y_equalizer_band">%s hertz band</string>
     <string name="a11y_equalizer_restore">Restore equalizer defaults</string>
+    <string name="a11y_cast">Cast</string>
     <string name="playing_item_details_time_remaining">Time remaining</string>
     <string name="playback_preferences_title">Playback</string>
     <string name="playback_preferences_description">Volume, seek controls, and audio</string>
@@ -291,4 +292,9 @@
     <string name="import_config_title">Import configuration</string>
     <string name="import_config_description">Restore app preferences from a file</string>
     <string name="import_config_failed_toast">Unable to import configuration, file may be invalid</string>
+    <string name="cast_sheet_title">Cast to</string>
+    <string name="cast_this_device">This device</string>
+    <string name="cast_no_devices">No devices found on this network</string>
+    <string name="cast_unavailable_offline">Casting is not available in offline mode</string>
+    <string name="cast_connection_lost">Lost the cast device, playback moved back to this device</string>
 </resources>

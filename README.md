@@ -1,18 +1,17 @@
-# Lissen - Clean Audiobookshelf Player
-[![Build Lissen App](https://github.com/GrakovNe/lissen-android/actions/workflows/app_build.yml/badge.svg)](https://github.com/GrakovNe/lissen-android/actions/workflows/app_build.yml)
+# Lissen - Clean Audiobookshelf Player (UPnP cast fork)
 
-<p align="center"> 
-  <a href="https://play.google.com/store/apps/details?id=org.grakovne.lissen"><img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Get it on Google Play" height="60" align="middle"></a>&nbsp;&nbsp;&nbsp;<!--
-  --><a href="https://f-droid.org/packages/org.grakovne.lissen"><img src="https://upload.wikimedia.org/wikipedia/commons/a/a3/Get_it_on_F-Droid_%28material_design%29.svg" alt="Get it on F-Droid" height="60" align="middle"></a><!--
-  --><a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22org.grakovne.lissen%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FGrakovNe%2Flissen-android%22%2C%22author%22%3A%22GrakovNe%22%2C%22name%22%3A%22Lissen%22%7D"><img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="89" align="middle"></a>
-</p>
+Fork of [GrakovNe/lissen-android](https://github.com/GrakovNe/lissen-android).
+
+> [!WARNING]
+> **Fork disclaimer:** This fork adds basic UPnP streaming, available via a cast icon at the top right of the cover.
+> It was mostly developed by AI and has only been tested with a WiiM device and Android 17.
 
 ### Features
 
-  * Beautiful Interface: Intuitive design that makes browsing and listening to your audiobooks easy and enjoyable.
-  * Cloud Sync: Automatically syncs your audiobook progress across devices, keeping everything up to date no matter where you are.
-  * Streaming Support: Stream your audiobooks directly from the cloud without needing to download them first.
-  * Offline Listening: Download audiobooks to listen offline, ideal for those who want to access their collection without an internet connection.
+- Beautiful Interface: Intuitive design that makes browsing and listening to your audiobooks easy and enjoyable.
+- Cloud Sync: Automatically syncs your audiobook progress across devices, keeping everything up to date no matter where you are.
+- Streaming Support: Stream your audiobooks directly from the cloud without needing to download them first.
+- Offline Listening: Download audiobooks to listen offline, ideal for those who want to access their collection without an internet connection.
 
 ### Screenshots
 
@@ -24,76 +23,35 @@
   <img src="https://github.com/GrakovNe/lissen-android/raw/main/metadata/en-US/images/phoneScreenshots/6.png" alt="Screenshot 6" width="160">
 </p>
 
-### Disclaimer
-
-Lissen is not a clone of the official Audiobookshelf app and does not aim to replicate all of its features. 
-The goal of this project is to provide a minimalistic interface and a seamless experience for listening to audiobooks and podcasts.
-
-If there’s a feature you feel is missing or would significantly improve your experience, feel free to open an issue and share your suggestion. 
-While not every feature request will be implemented, all ideas are welcome and will be thoughtfully considered.
-
 ### Building
 
 1. Clone the repository:
+
 ```
-git clone https://github.com/grakovne/lissen.git
+git clone https://github.com/rausche-kuh/lissen-android-cast.git
 ```
 
 2. Setup the SDK into your local.properties file
+
 ```
 nano local.properties
 ```
 
 3. Open the project in Android Studio or build it manually
+
 ```
 ./gradlew assembleDebug # Debug Build
 ./gradlew assembleRelease # Release Build
 ```
-5. Build and run the app on an Android device or emulator.
 
-### Signing Certificate
-
-Release APKs are signed with the following certificate (SHA-256 fingerprint):
-
-```
-org.grakovne.lissen
-1A:E5:50:AB:71:2B:C1:78:53:DF:F5:9F:52:C0:69:7E:CC:48:85:4C:9B:7E:51:B4:7A:6F:79:C9:D2:D0:FA:E4
-```
-
-Verify an APK with [apksigner](https://developer.android.com/tools/apksigner):
-
-```
-apksigner verify --print-certs lissen.apk
-```
-
-### Localization
-
-Help us translate Lissen into more languages! We use [Weblate](https://hosted.weblate.org/engage/lissen/) to manage translations.
-
-Current localization status:
-
-<a href="https://hosted.weblate.org/engage/lissen/">
-<img src="https://hosted.weblate.org/widget/lissen/android-app/multi-auto.svg" alt="Translation status" />
-</a>
-
-To contribute:
-1. Visit the [Lissen translation project](https://hosted.weblate.org/engage/lissen/).
-2. Sign up or log in to Weblate.
-3. Start translating or reviewing existing translations for your preferred language.
-
-### AI-Assisted Contributions
-
-AI-assisted development is welcome in this project and can be very useful when applied thoughtfully.
-
-However, any AI-generated changes that are not properly reviewed or tested will be discarded without hesitation.
-
-AI is a great tool, but until it can reliably understand the code it produces and the consequences of its changes, all AI-generated contributions must remain under strict human review.
+4. Build and run the app on an Android device or emulator.
 
 ### Demo Environment
 
 You can connect to a demo [Audiobookshelf](https://github.com/advplyr/audiobookshelf) instance through the Lissen app:
 
 URL: [https://demo.lissenapp.org/](https://demo.lissenapp.org/)
+
 ```
 Username: demo
 Password: demo
@@ -102,4 +60,5 @@ Password: demo
 This instance is contains only Public Domain audiobooks from [LibriVox](https://librivox.org/)
 
 ## License
+
 Lissen is open-source and licensed under the MIT License. See the LICENSE file for more details.

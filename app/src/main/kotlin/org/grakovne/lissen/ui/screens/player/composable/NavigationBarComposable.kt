@@ -146,7 +146,7 @@ fun NavigationBarComposable(
       )
 
       NavigationBarItem(
-        enabled = hasEpisodes,
+        enabled = hasEpisodes && isCasting().not(),
         icon = {
           Icon(
             Icons.Outlined.SlowMotionVideo,
