@@ -97,7 +97,7 @@ class LoginFlowE2ETest {
     InstrumentationRegistry.getArguments().getString(name) ?: fallback
 
   private companion object {
-    const val TARGET_PACKAGE = "org.grakovne.lissen.minified"
+    const val TARGET_PACKAGE = "io.github.rauschekuh.lauschen"
     const val TIMEOUT_MS = 45_000L
     const val RESTART_TIMEOUT_MS = 60_000L
     const val SHORT_TIMEOUT_MS = 5_000L

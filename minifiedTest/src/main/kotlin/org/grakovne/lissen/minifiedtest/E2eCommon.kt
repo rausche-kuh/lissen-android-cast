@@ -172,7 +172,7 @@ fun UiAutomatorTestScope.scrollUntilVisible(
   return waitForElement(selector)
 }
 
-const val TARGET_PACKAGE = "org.grakovne.lissen.minified"
+const val TARGET_PACKAGE = "io.github.rauschekuh.lauschen"
 
 const val LOGIN_SCREEN_WAIT_MS = 15_000L
 

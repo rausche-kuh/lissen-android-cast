@@ -85,7 +85,7 @@ android {
   }
   
   defaultConfig {
-    applicationId = "org.grakovne.lissen"
+    applicationId = "io.github.rauschekuh.lauschen"
     minSdk = 28
     targetSdk = 37
     versionCode = 11209
@@ -121,8 +121,6 @@ android {
     }
     create("minified") {
       initWith(getByName("release"))
-      applicationIdSuffix = ".minified"
-      versionNameSuffix = " (MINIFIED TEST)"
       signingConfig = signingConfigs.getByName("debug")
       matchingFallbacks.add("release")
     }

@@ -1,6 +1,6 @@
-# Lissen - Clean Audiobookshelf Player (UPnP cast fork)
+# Lauschen - Audiobookshelf Player with UPnP casting
 
-Fork of [GrakovNe/lissen-android](https://github.com/GrakovNe/lissen-android).
+Lauschen is a fork of [Lissen](https://github.com/GrakovNe/lissen-android) by GrakovNe.
 
 > [!WARNING]
 > **Fork disclaimer:** This fork adds basic UPnP streaming, available via a cast icon at the top right of the cover.
@@ -48,7 +48,7 @@ nano local.properties
 
 ### Demo Environment
 
-You can connect to a demo [Audiobookshelf](https://github.com/advplyr/audiobookshelf) instance through the Lissen app:
+You can connect to a demo [Audiobookshelf](https://github.com/advplyr/audiobookshelf) instance through Lauschen:
 
 URL: [https://demo.lissenapp.org/](https://demo.lissenapp.org/)
 
@@ -61,4 +61,4 @@ This instance is contains only Public Domain audiobooks from [LibriVox](https://
 
 ## License
 
-Lissen is open-source and licensed under the MIT License. See the LICENSE file for more details.
+Lauschen is open-source and licensed under the MIT License, like the original Lissen. See the LICENSE file for more details.
