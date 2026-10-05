@@ -88,8 +88,8 @@ android {
     applicationId = "io.github.rauschekuh.lauschen"
     minSdk = 28
     targetSdk = 37
-    versionCode = 11209
-    versionName = "1.12.9-lauschen.2"
+    versionCode = 11210
+    versionName = "1.12.10-lauschen.1"
     
     testInstrumentationRunner = "org.grakovne.lissen.HiltTestRunner"
     
