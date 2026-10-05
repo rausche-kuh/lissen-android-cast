@@ -6,6 +6,10 @@ Fork of [GrakovNe/lissen-android](https://github.com/GrakovNe/lissen-android).
 > **Fork disclaimer:** This fork adds basic UPnP streaming, available via a cast icon at the top right of the cover.
 > It was mostly developed by AI and has only been tested with a WiiM device and Android 17.
 
+<p align="center">
+  <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22io.github.rauschekuh.lauschen%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Frausche-kuh%2Flissen-android-cast%22%2C%22author%22%3A%22rausche-kuh%22%2C%22name%22%3A%22Lauschen%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%7D%22%7D"><img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="89" align="middle"></a>
+</p>
+
 ### Features
 
 - Beautiful Interface: Intuitive design that makes browsing and listening to your audiobooks easy and enjoyable.
