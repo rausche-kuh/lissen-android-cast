@@ -8,6 +8,7 @@ import org.grakovne.lissen.domain.CurrentEpisodeTimerOption
 import org.grakovne.lissen.domain.DetailedItem
 import org.grakovne.lissen.domain.DurationTimerOption
 import org.grakovne.lissen.domain.EqualizerSettings
+import org.grakovne.lissen.domain.RewindOnPauseSettings
 import org.grakovne.lissen.domain.SeekTime
 import org.grakovne.lissen.domain.SleepTimerSettings
 import org.grakovne.lissen.domain.TimerOption
@@ -28,6 +29,7 @@ class PlaybackPreferences
     val hasLastPlayingItemFlow: Flow<Boolean> = store.asFlow(KEY_PLAYING_ITEM) { getLastPlayingItem() != null }
     val playbackVolumeBoostFlow: Flow<Int> = store.asFlow(KEY_VOLUME_BOOST, ::getPlaybackVolumeBoost)
     val audioFocusLossPolicyFlow: Flow<AudioFocusLossPolicy> = store.asFlow(KEY_AUDIO_FOCUS_LOSS_POLICY, ::getAudioFocusLossPolicy)
+    val seekTimeFlow: Flow<SeekTime> = store.asFlow(KEY_PREFERRED_SEEK_TIME, ::getSeekTime)
     val equalizerFlow: Flow<EqualizerSettings> = store.asFlow(KEY_EQUALIZER, ::getEqualizer)
 
     fun getPlaybackVolumeBoost(): Int =
@@ -167,6 +169,22 @@ class PlaybackPreferences
       store.putString(KEY_SLEEP_TIMER_SETTINGS, json, commit = true)
     }
 
+    fun getRewindOnPause(): RewindOnPauseSettings {
+      val json = store.getString(KEY_REWIND_ON_PAUSE) ?: return RewindOnPauseSettings.Default
+      return try {
+        moshi.adapter(RewindOnPauseSettings::class.java).fromJson(json)?.clamped() ?: RewindOnPauseSettings.Default
+      } catch (e: com.squareup.moshi.JsonDataException) {
+        Timber.w("Stored rewind on pause settings are malformed, resetting due to: ${e.message}")
+        store.remove(KEY_REWIND_ON_PAUSE, commit = true)
+        RewindOnPauseSettings.Default
+      }
+    }
+
+    fun saveRewindOnPause(settings: RewindOnPauseSettings) {
+      val json = moshi.adapter(RewindOnPauseSettings::class.java).toJson(settings.clamped())
+      store.putString(KEY_REWIND_ON_PAUSE, json, commit = true)
+    }
+
     private fun savePlayingItemInternal(
       libraryId: String,
       item: DetailedItem?,
@@ -228,6 +246,9 @@ class PlaybackPreferences
       private const val KEY_EQUALIZER = "equalizer"
       private const val KEY_DEFAULT_SLEEP_TIMER = "default_sleep_timer"
       private const val KEY_SLEEP_TIMER_SETTINGS = "sleep_timer_settings"
+
+      // 1.4.5 to 1.6.0 left {"enabled":…,"time":"SEEK_5"} under "rewind_on_pause", which would load as enabled
+      private const val KEY_REWIND_ON_PAUSE = "rewind_on_pause_settings"
 
       private val playingItemsType =
         Types.newParameterizedType(

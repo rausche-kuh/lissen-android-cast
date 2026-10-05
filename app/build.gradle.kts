@@ -88,8 +88,8 @@ android {
     applicationId = "org.grakovne.lissen"
     minSdk = 28
     targetSdk = 37
-    versionCode = 11209
-    versionName = "1.12.9-release"
+    versionCode = 11210
+    versionName = "1.12.10-release"
     
     testInstrumentationRunner = "org.grakovne.lissen.HiltTestRunner"
     
@@ -131,8 +131,6 @@ android {
       versionNameSuffix = " (DEBUG)"
       matchingFallbacks.add("release")
       isDebuggable = true
-      enableUnitTestCoverage = true
-      enableAndroidTestCoverage = true
     }
   }
   
@@ -163,6 +161,7 @@ android {
   testOptions {
     unitTests.all {
       it.useJUnitPlatform()
+      it.maxParallelForks = 4
     }
   }
 }
