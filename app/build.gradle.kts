@@ -129,8 +129,6 @@ android {
       versionNameSuffix = " (DEBUG)"
       matchingFallbacks.add("release")
       isDebuggable = true
-      enableUnitTestCoverage = true
-      enableAndroidTestCoverage = true
     }
   }
   
@@ -161,6 +159,7 @@ android {
   testOptions {
     unitTests.all {
       it.useJUnitPlatform()
+      it.maxParallelForks = 4
     }
   }
 }
