@@ -24,15 +24,37 @@ class RendererVolumeTest {
   }
 
   @Test
-  fun `a step moves the volume by five and stays in range`() {
-    volume.set(97)
+  fun `a step moves the volume by two and stays in range`() {
+    volume.set(99)
     volume.adjust(1)
     assertEquals(100, control.level)
 
-    volume.set(3)
+    volume.set(1)
     volume.adjust(-1)
     assertEquals(0, control.level)
     assertEquals(0, volume.volume)
+  }
+
+  @Test
+  fun `the player shows the volume in steps of two`() {
+    volume.set(36)
+    assertEquals(18, volume.steps)
+
+    volume.setSteps(RendererVolume.MAX_STEPS)
+    assertEquals(100, control.level)
+  }
+
+  @Test
+  fun `a step lands on the step the player showed for it`() {
+    control.level = 35
+    volume.poll()
+
+    volume.adjust(1)
+    assertEquals(38, control.level)
+    assertEquals(19, volume.steps)
+
+    volume.adjust(3)
+    assertEquals(44, control.level)
   }
 
   @Test
@@ -41,7 +63,7 @@ class RendererVolumeTest {
 
     volume.adjust(1)
 
-    assertEquals(65, control.level)
+    assertEquals(62, control.level)
   }
 
   @Test

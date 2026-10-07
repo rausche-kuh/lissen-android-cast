@@ -23,6 +23,7 @@ import timber.log.Timber
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * A [Player] over a cast device. It shows the same chapter queue as the ExoPlayer, so every
@@ -41,6 +42,9 @@ class RendererPlayer(
     RendererController(transport, streams, SystemClock::elapsedRealtime, onChange = { handler.post(::refresh) })
   private val volume = RendererVolume(volumeControl)
   private val executor = MoreExecutors.listeningDecorator(Executors.newSingleThreadScheduledExecutor())
+
+  // a held volume key presses many times a second: presses made while the renderer answers go in one command
+  private val pendingVolumeSteps = AtomicInteger()
 
   private var playlist: List<MediaItemData> = emptyList()
   private var playlistGeneration = 0
@@ -89,7 +93,7 @@ class RendererPlayer(
         .setAvailableCommands(commands)
         .setDeviceInfo(if (volume.available) REMOTE_WITH_VOLUME else REMOTE)
         .setVolume(volume.scale)
-        .setDeviceVolume(volume.volume)
+        .setDeviceVolume(volume.steps)
         .setIsDeviceMuted(volume.muted)
         .setPlaylist(playlist)
         .setPlayWhenReady(rendererState.playWhenReady, PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
@@ -199,11 +203,11 @@ class RendererPlayer(
   override fun handleSetDeviceVolume(
     deviceVolume: Int,
     flags: Int,
-  ): ListenableFuture<*> = submit { volume.set(deviceVolume) }
+  ): ListenableFuture<*> = submit { volume.setSteps(deviceVolume) }
 
-  override fun handleIncreaseDeviceVolume(flags: Int): ListenableFuture<*> = submit { volume.adjust(1) }
+  override fun handleIncreaseDeviceVolume(flags: Int): ListenableFuture<*> = adjustVolume(1)
 
-  override fun handleDecreaseDeviceVolume(flags: Int): ListenableFuture<*> = submit { volume.adjust(-1) }
+  override fun handleDecreaseDeviceVolume(flags: Int): ListenableFuture<*> = adjustVolume(-1)
 
   override fun handleSetDeviceMuted(
     muted: Boolean,
@@ -238,6 +242,14 @@ class RendererPlayer(
   }
 
   private fun submit(block: () -> Unit): ListenableFuture<*> = executor.submit(block)
+
+  private fun adjustVolume(steps: Int): ListenableFuture<*> {
+    pendingVolumeSteps.addAndGet(steps)
+    return submit {
+      val pending = pendingVolumeSteps.getAndSet(0)
+      if (pending != 0) volume.adjust(pending)
+    }
+  }
 
   // the controller polls faster towards the end of a file
   private fun schedulePoll(delayMs: Long): Future<*> =
@@ -390,7 +402,7 @@ class RendererPlayer(
     val REMOTE_WITH_VOLUME: DeviceInfo =
       DeviceInfo
         .Builder(DeviceInfo.PLAYBACK_TYPE_REMOTE)
-        .setMaxVolume(VolumeControl.MAX_VOLUME)
+        .setMaxVolume(RendererVolume.MAX_STEPS)
         .build()
   }
 }
