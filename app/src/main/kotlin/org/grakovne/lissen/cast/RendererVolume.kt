@@ -20,6 +20,13 @@ class RendererVolume(
   var muted: Boolean = false
     private set
 
+  /**
+   * The volume in steps of [STEP], as the player shows it. Android and the media session move a
+   * remote volume by one unit of its maximum per key press, so a press is one step here.
+   */
+  val steps: Int
+    get() = (volume / STEP.toFloat()).roundToInt()
+
   /** The player volume, as the sleep timer fades it: a share of the volume the renderer had at full scale. */
   @Volatile
   var scale: Float = 1f
@@ -44,9 +51,12 @@ class RendererVolume(
     if (muted) setMuted(false)
   }
 
+  fun setSteps(steps: Int) = set(steps * STEP)
+
+  /** Counts from the shown step, so the renderer lands where the placeholder of the press showed it. */
   fun adjust(steps: Int) {
     if (known.not()) read()
-    if (known) set(volume + steps * STEP)
+    if (known) setSteps(this.steps + steps)
   }
 
   fun scale(scale: Float) {
@@ -90,7 +100,12 @@ class RendererVolume(
   }
 
   companion object {
-    const val STEP = 5
+    /**
+     * The Cast design checklist asks hardware volume keys for at most 5% of the device's range on
+     * video devices and 2% on audio-only ones; 2% suits both, and is finer than a phone's own steps.
+     */
+    const val STEP = 2
+    const val MAX_STEPS = VolumeControl.MAX_VOLUME / STEP
     const val POLL_EVERY = 3
   }
 }

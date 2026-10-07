@@ -13,16 +13,17 @@ import androidx.media3.exoplayer.ExoPlayer
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.grakovne.lissen.R
 import org.grakovne.lissen.domain.DetailedItem
 import org.grakovne.lissen.playback.service.PlaybackService
@@ -53,6 +54,22 @@ class CastSession
 
     private var player: RendererPlayer? = null
     private val scope = MainScope()
+
+    /** What each protocol found at its last search. Kept between scans, since devices rarely come and go. */
+    private val found = MutableStateFlow<Map<CastProtocol, List<CastDevice>>>(emptyMap())
+
+    /** The devices of the last searches, so the list shows them again while the next scan runs. */
+    val devices: StateFlow<List<CastDevice>> =
+      found
+        .map { it.values.flatten().sortedWith(castDeviceOrder) }
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    /** Every protocol has searched once, so an empty list means there is nothing to find. */
+    val searched: StateFlow<Boolean> =
+      found
+        .map { it.keys.containsAll(protocols) }
+        .stateIn(scope, SharingStarted.Eagerly, false)
+
     private val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
     private val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
 
@@ -96,50 +113,44 @@ class CastSession
 
     fun disconnect() = disconnect(resume = null)
 
-    /** A scan of every protocol every few seconds. A device missing from two scans in a row drops out. */
-    fun scan(): Flow<List<CastDevice>> =
-      flow {
-        val multicastLock = wifiManager.createMulticastLock("lissen:cast-discovery").apply { setReferenceCounted(false) }
-        val missedScans = mutableMapOf<String, Int>()
-        val known = mutableMapOf<String, CastDevice>()
+    /**
+     * Every protocol searches every few seconds until cancelled, each on its own, so the devices
+     * of the faster one show without waiting for the slower one. Updates [devices].
+     */
+    suspend fun scan() {
+      val multicastLock = wifiManager.createMulticastLock("lissen:cast-discovery").apply { setReferenceCounted(false) }
 
-        try {
-          multicastLock.acquire()
-
-          while (true) {
-            val found = searchAll()
-
-            found.forEach {
-              known[it.id] = it
-              missedScans[it.id] = 0
-            }
-            known.keys
-              .filter { id -> found.none { it.id == id } }
-              .forEach { id ->
-                val missed = (missedScans[id] ?: 0) + 1
-                missedScans[id] = missed
-                if (missed >= MAX_MISSED_SCANS) known.remove(id)
-              }
-
-            emit(known.values.sortedWith(castDeviceOrder))
-            delay(SCAN_PAUSE_MS)
-          }
-        } finally {
-          multicastLock.release()
-        }
+      try {
+        multicastLock.acquire()
+        coroutineScope { protocols.forEach { launch { scan(it) } } }
+      } finally {
+        multicastLock.release()
       }
+    }
 
-    private suspend fun searchAll(): List<CastDevice> =
-      coroutineScope {
-        protocols
-          .map { protocol ->
-            async(Dispatchers.IO) {
-              runCatching { protocol.search() }
-                .onFailure { Timber.w(it, "Discovery failed in ${protocol::class.simpleName}") }
-                .getOrDefault(emptyList())
-            }
-          }.awaitAll()
-          .flatten()
+    /** A device missing from two searches in a row drops out. */
+    private suspend fun scan(protocol: CastProtocol) {
+      val missedSearches = mutableMapOf<String, Int>()
+
+      while (true) {
+        val result = search(protocol)
+        val ids = result.map { it.id }.toSet()
+        ids.forEach(missedSearches::remove)
+
+        val missing = found.value[protocol].orEmpty().filter { it.id !in ids }
+        missing.forEach { missedSearches[it.id] = (missedSearches[it.id] ?: 0) + 1 }
+        val kept = missing.filter { missedSearches.getValue(it.id) < MAX_MISSED_SCANS }
+
+        found.update { it + (protocol to (result + kept)) }
+        delay(SCAN_PAUSE_MS)
+      }
+    }
+
+    private suspend fun search(protocol: CastProtocol): List<CastDevice> =
+      withContext(Dispatchers.IO) {
+        runCatching { protocol.search() }
+          .onFailure { Timber.w(it, "Discovery failed in ${protocol::class.simpleName}") }
+          .getOrDefault(emptyList())
       }
 
     private fun disconnect(resume: Boolean?) {

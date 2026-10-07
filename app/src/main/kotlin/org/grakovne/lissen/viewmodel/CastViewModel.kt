@@ -33,9 +33,10 @@ class CastViewModel
         .map { it.not() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), libraryPreferences.isForceCache().not())
 
-    /** Null until the first scan has finished. */
-    private val _devices = MutableStateFlow<List<CastDevice>?>(null)
-    val devices: StateFlow<List<CastDevice>?> = _devices.asStateFlow()
+    /** The last devices found, also from an earlier scan. */
+    val devices: StateFlow<List<CastDevice>> = castSession.devices
+
+    val searched: StateFlow<Boolean> = castSession.searched
 
     private val _scanning = MutableStateFlow(false)
     val scanning: StateFlow<Boolean> = _scanning.asStateFlow()
@@ -45,17 +46,14 @@ class CastViewModel
     fun startScan() {
       if (scanJob?.isActive == true) return
 
-      _devices.value = null
       _scanning.value = true
-      scanJob =
-        viewModelScope
-          .launch { castSession.scan().collect { _devices.value = it } }
-          .also { job -> job.invokeOnCompletion { _scanning.value = false } }
+      scanJob = viewModelScope.launch { castSession.scan() }
     }
 
     fun stopScan() {
       scanJob?.cancel()
       scanJob = null
+      _scanning.value = false
     }
 
     fun connect(device: CastDevice) = castSession.connect(device)
