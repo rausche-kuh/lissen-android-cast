@@ -104,6 +104,7 @@ fun CastDeviceSheet(
   val active by viewModel.active.collectAsState()
   val available by viewModel.available.collectAsState()
   val devices by viewModel.devices.collectAsState()
+  val searched by viewModel.searched.collectAsState()
   val scanning by viewModel.scanning.collectAsState()
 
   var permitted by remember { mutableStateOf(hasLocalNetworkPermission(context)) }
@@ -144,7 +145,7 @@ fun CastDeviceSheet(
     )
 
     if (available) {
-      (listOfNotNull(active) + devices.orEmpty())
+      (listOfNotNull(active) + devices)
         .distinctBy { it.id }
         .sortedWith(castDeviceOrder)
         .forEach { device ->
@@ -164,7 +165,7 @@ fun CastDeviceSheet(
     val hint =
       when {
         available.not() -> stringResource(R.string.cast_unavailable_offline)
-        devices?.isEmpty() == true && active == null -> stringResource(R.string.cast_no_devices)
+        searched && devices.isEmpty() && active == null -> stringResource(R.string.cast_no_devices)
         else -> null
       }
 
